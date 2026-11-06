@@ -1,0 +1,18 @@
+# Python's virtual environment (installed libraries - can always be recreated)
+.venv/
+
+# Python cache files (auto-generated)
+__pycache__/
+*.pyc
+
+# Secrets: API keys and passwords live here - NEVER commit this
+.env
+
+# Downloaded data and local database (can be re-downloaded by our scripts)
+data/
+*.db
+
+# Editor / OS clutter
+.vscode/
+Thumbs.db
+.DS_Store
