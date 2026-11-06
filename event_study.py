@@ -64,10 +64,8 @@ def compute_results(prices: pd.Series, events: pd.DataFrame):
             print(f"  skipped {event['date'].date()} (not enough price data)")
             continue
         paths[event["date"]] = path
-        rows.append({"date": event["date"], "decision": event["decision"],
-                     "size_mbd": event["size_mbd"],
-                     **{f"day_{h}_pct": round(path[h], 2) for h in HORIZONS},
-                     "description": event["description"]})
+        rows.append({**event.to_dict(),  # keep all the event's own columns
+                     **{f"day_{h}_pct": round(path[h], 2) for h in HORIZONS}})
     return pd.DataFrame(rows), paths
 
 

@@ -10,7 +10,8 @@ market reacted to similar events in the past.
 ## Data sources (planned)
 
 - **Prices:** WTI and Brent crude daily prices (EIA / FRED, public data)
-- **Scheduled events:** EIA weekly inventory reports, OPEC+ decisions, Fed rate decisions
+- **Inventories:** EIA weekly U.S. crude stocks (public spreadsheet, no API key)
+- **Scheduled events:** OPEC+ decisions (verified list), Fed rate decisions (planned)
 - **News:** GDELT global news database
 
 ## How to run
@@ -25,6 +26,9 @@ python -m venv .venv
 
 # draw a chart to data/oil_prices.png
 .venv\Scripts\python.exe plot_prices.py
+
+# download EIA weekly crude inventories and classify each report
+.venv\Scripts\python.exe inventory_events.py
 
 # measure how oil moved after OPEC+ decisions (events/opec_decisions.csv)
 .venv\Scripts\python.exe event_study.py
