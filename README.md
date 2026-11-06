@@ -25,6 +25,9 @@ python -m venv .venv
 
 # draw a chart to data/oil_prices.png
 .venv\Scripts\python.exe plot_prices.py
+
+# measure how oil moved after OPEC+ decisions (events/opec_decisions.csv)
+.venv\Scripts\python.exe event_study.py
 ```
 
 ## Roadmap
