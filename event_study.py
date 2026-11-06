@@ -39,11 +39,36 @@ COLORS = {"cut": "#2a78d6", "increase": "#eb6834",
           "extend": "#1baf7a", "no_deal": "#eda100"}
 
 
-def load_prices() -> pd.Series:
+def load_prices(series: str = SERIES) -> pd.Series:
     with sqlite3.connect(DB_PATH) as db:
         rows = pd.read_sql("SELECT date, price FROM prices WHERE series = ?",
-                           db, params=[SERIES], parse_dates=["date"])
+                           db, params=[series], parse_dates=["date"])
     return rows.set_index("date")["price"].sort_index()
+
+
+def load_events() -> pd.DataFrame:
+    return pd.read_csv(EVENTS_PATH, parse_dates=["date"])
+
+
+def compute_results(prices: pd.Series, events: pd.DataFrame):
+    """Run the event study.
+
+    Returns (results, paths):
+      results - one row per event with its % change at each horizon
+      paths   - {event date: % change for every day in WINDOW}
+    """
+    paths, rows = {}, []
+    for _, event in events.iterrows():
+        path = price_path(prices, event["date"])
+        if path is None:
+            print(f"  skipped {event['date'].date()} (not enough price data)")
+            continue
+        paths[event["date"]] = path
+        rows.append({"date": event["date"], "decision": event["decision"],
+                     "size_mbd": event["size_mbd"],
+                     **{f"day_{h}_pct": round(path[h], 2) for h in HORIZONS},
+                     "description": event["description"]})
+    return pd.DataFrame(rows), paths
 
 
 def price_path(prices: pd.Series, event_date: pd.Timestamp) -> pd.Series | None:
@@ -67,21 +92,8 @@ def typical_move(prices: pd.Series, days: int) -> float:
 
 def main() -> None:
     prices = load_prices()
-    events = pd.read_csv(EVENTS_PATH, parse_dates=["date"])
-
-    paths, rows = {}, []
-    for _, event in events.iterrows():
-        path = price_path(prices, event["date"])
-        if path is None:
-            print(f"  skipped {event['date'].date()} (not enough price data)")
-            continue
-        paths[event["date"]] = path
-        rows.append({"date": event["date"].date(), "decision": event["decision"],
-                     **{f"day_{h}_pct": round(path[h], 2) for h in HORIZONS},
-                     "description": event["description"]})
-
-    results = pd.DataFrame(rows)
-    results.to_csv(RESULTS_PATH, index=False)
+    results, paths = compute_results(prices, load_events())
+    results.to_csv(RESULTS_PATH, index=False, date_format="%Y-%m-%d")
 
     # ---- Summary table -------------------------------------------------
     print(f"\n{SERIES} price change after OPEC+ decisions "
@@ -109,7 +121,7 @@ def main() -> None:
     ax.set_facecolor("#fcfcfb")
     for decision in DECISIONS:
         dates = results.loc[results["decision"] == decision, "date"]
-        group_paths = [paths[pd.Timestamp(d)] for d in dates]
+        group_paths = [paths[d] for d in dates]
         if not group_paths:
             continue
         avg = pd.concat(group_paths, axis=1).mean(axis=1)

@@ -1,42 +1,42 @@
 date,decision,size_mbd,description,verified
-1999-03-23,cut,1.7,OPEC and allies agree 1.7 mb/d cut after 1998 price collapse,no
-2000-03-28,increase,1.45,OPEC raises output as prices top $30,no
-2001-01-17,cut,1.5,OPEC cuts 1.5 mb/d amid slowing demand,no
-2001-03-17,cut,1.0,OPEC cuts a further 1 mb/d,no
-2001-12-28,cut,1.5,OPEC confirms 1.5 mb/d cut from Jan 2002 after non-OPEC pledges,no
-2006-10-19,cut,1.2,OPEC agrees 1.2 mb/d cut at Doha emergency meeting,no
-2006-12-14,cut,0.5,OPEC agrees further 0.5 mb/d cut in Abuja,no
-2008-10-24,cut,1.5,OPEC cuts 1.5 mb/d as financial crisis hits demand,no
-2008-12-17,cut,2.2,OPEC record 2.2 mb/d cut in Oran,no
-2011-06-08,no_deal,,OPEC meeting breaks up with no agreement to raise output,no
-2014-11-27,no_deal,,OPEC declines to cut despite price slump; keeps 30 mb/d ceiling,no
-2015-12-04,no_deal,,OPEC fails to agree any production ceiling,no
-2016-04-17,no_deal,,Doha talks on output freeze collapse,no
-2016-09-28,cut,,Algiers accord: OPEC agrees in principle to limit output,no
-2016-11-30,cut,1.2,OPEC agrees first cut since 2008,no
-2016-12-10,cut,0.558,Non-OPEC producers led by Russia join cuts (OPEC+ formed),no
-2017-05-25,extend,,OPEC+ extends cuts by nine months,no
-2017-11-30,extend,,OPEC+ extends cuts to end of 2018,no
-2018-06-22,increase,1.0,OPEC+ agrees to raise output by about 1 mb/d,no
-2018-12-07,cut,1.2,OPEC+ agrees 1.2 mb/d cut,no
-2019-07-02,extend,,OPEC+ extends cuts to March 2020,no
-2019-12-06,cut,0.5,OPEC+ deepens cuts by 0.5 mb/d,no
-2020-03-06,no_deal,,OPEC+ talks collapse as Russia rejects deeper cuts; price war follows,no
-2020-04-12,cut,9.7,OPEC+ record 9.7 mb/d cut during COVID,no
-2020-06-06,extend,,OPEC+ extends record cuts through July,no
-2021-01-05,cut,1.0,Saudi Arabia announces surprise voluntary 1 mb/d cut,no
-2021-07-18,increase,0.4,OPEC+ resolves UAE dispute; adds 0.4 mb/d per month,no
-2022-10-05,cut,2.0,OPEC+ cuts targets by 2 mb/d,no
-2023-04-02,cut,1.16,Surprise voluntary cuts by Saudi Arabia and others,no
-2023-06-04,cut,1.0,Saudi Arabia pledges extra voluntary 1 mb/d cut,no
-2023-11-30,cut,2.2,OPEC+ voluntary cuts totalling about 2.2 mb/d for Q1 2024,no
-2024-06-02,extend,,OPEC+ extends cuts into 2025 but sets plan to unwind voluntary cuts,no
-2024-12-05,extend,,OPEC+ delays unwinding of cuts to April 2025,no
-2025-03-03,increase,0.138,OPEC+ confirms output increases begin in April,no
-2025-04-03,increase,0.411,OPEC+ surprises with triple-size 0.411 mb/d hike for May,no
-2025-05-03,increase,0.411,OPEC+ agrees another 0.411 mb/d hike for June,no
-2025-05-31,increase,0.411,OPEC+ agrees 0.411 mb/d hike for July,no
-2025-07-05,increase,0.548,OPEC+ agrees larger 0.548 mb/d hike for August,no
-2025-08-03,increase,0.547,OPEC+ completes unwinding of 2.2 mb/d voluntary cuts,no
-2025-09-07,increase,0.137,OPEC+ begins unwinding next 1.65 mb/d layer,no
-2025-10-05,increase,0.137,OPEC+ agrees modest 0.137 mb/d hike for November,no
+1999-03-23,cut,1.7,OPEC agrees 1.7 mb/d cut after 1998 price collapse; 2.1 mb/d including non-OPEC pledges,yes
+2000-03-28,increase,1.45,OPEC raises output as prices top $30,yes
+2001-01-17,cut,1.5,OPEC cuts 1.5 mb/d amid slowing demand,yes
+2001-03-17,cut,1.0,OPEC cuts a further 1 mb/d,yes
+2001-12-28,cut,1.5,OPEC confirms 1.5 mb/d cut from Jan 2002 after non-OPEC pledges,yes
+2006-10-20,cut,1.2,OPEC agrees 1.2 mb/d cut at Doha emergency meeting,yes
+2006-12-14,cut,0.5,OPEC agrees further 0.5 mb/d cut in Abuja,yes
+2008-10-24,cut,1.5,OPEC cuts 1.5 mb/d as financial crisis hits demand,yes
+2008-12-17,cut,2.2,OPEC record 2.2 mb/d cut in Oran,yes
+2011-06-08,no_deal,,OPEC meeting breaks up with no agreement to raise output,yes
+2014-11-27,no_deal,,OPEC declines to cut despite price slump; keeps 30 mb/d ceiling,yes
+2015-12-04,no_deal,,OPEC fails to agree any production ceiling,yes
+2016-04-17,no_deal,,Doha talks on output freeze collapse,yes
+2016-09-28,cut,,Algiers accord: OPEC agrees in principle to limit output,yes
+2016-11-30,cut,1.2,OPEC agrees first cut since 2008,yes
+2016-12-10,cut,0.558,Non-OPEC producers led by Russia join cuts (OPEC+ formed),yes
+2017-05-25,extend,,OPEC+ extends cuts by nine months,yes
+2017-11-30,extend,,OPEC+ extends cuts to end of 2018,yes
+2018-06-23,increase,1.0,OPEC+ agrees to raise output by about 1 mb/d,yes
+2018-12-07,cut,1.2,OPEC+ agrees 1.2 mb/d cut,yes
+2019-07-02,extend,,OPEC+ extends cuts to March 2020,yes
+2019-12-06,cut,0.5,OPEC+ deepens cuts by 0.5 mb/d,yes
+2020-03-06,no_deal,,OPEC+ talks collapse as Russia rejects deeper cuts; price war follows,yes
+2020-04-12,cut,9.7,OPEC+ record 9.7 mb/d cut during COVID,yes
+2020-06-06,extend,,OPEC+ extends record cuts through July,yes
+2021-01-05,cut,1.0,Saudi Arabia announces surprise voluntary 1 mb/d cut,yes
+2021-07-18,increase,0.4,OPEC+ resolves UAE dispute; adds 0.4 mb/d per month,yes
+2022-10-05,cut,2.0,OPEC+ cuts targets by 2 mb/d,yes
+2023-04-02,cut,1.16,Surprise voluntary cuts by Saudi Arabia and others,yes
+2023-06-04,cut,1.0,Saudi Arabia pledges extra voluntary 1 mb/d cut,yes
+2023-11-30,cut,2.2,OPEC+ voluntary cuts totalling about 2.2 mb/d for Q1 2024,yes
+2024-06-02,extend,,OPEC+ extends cuts into 2025 but sets plan to unwind voluntary cuts,yes
+2024-12-05,extend,,OPEC+ delays unwinding of cuts to April 2025,yes
+2025-03-03,increase,0.138,OPEC+ confirms output increases begin in April,yes
+2025-04-03,increase,0.411,OPEC+ surprises with triple-size 0.411 mb/d hike for May,yes
+2025-05-03,increase,0.411,OPEC+ agrees another 0.411 mb/d hike for June,yes
+2025-05-31,increase,0.411,OPEC+ agrees 0.411 mb/d hike for July,yes
+2025-07-05,increase,0.548,OPEC+ agrees larger 0.548 mb/d hike for August,yes
+2025-08-03,increase,0.547,OPEC+ completes unwinding of 2.2 mb/d voluntary cuts,yes
+2025-09-07,increase,0.137,OPEC+ begins unwinding next 1.65 mb/d layer,yes
+2025-10-05,increase,0.137,OPEC+ agrees modest 0.137 mb/d hike for November,yes
