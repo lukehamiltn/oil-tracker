@@ -25,8 +25,13 @@ PCT = "%+.1f%%"
 # ---------------------------------------------------------------------------
 @st.cache_data(ttl=6 * 60 * 60, show_spinner="Loading the latest oil data...")
 def get_data():
-    fetch_prices.main()
-    inv.download_inventories()
+    # Download fresh data. If a source is temporarily down, carry on with
+    # the copy we already have (if any) rather than crashing the site.
+    for download in (fetch_prices.main, inv.download_inventories):
+        try:
+            download()
+        except Exception as error:
+            print(f"Download failed, using saved data instead: {error}")
     prices = es.load_prices()
     opec = es.compute_results(prices, es.load_events())
     inv_events = inv.build_events(inv.load_inventories())
