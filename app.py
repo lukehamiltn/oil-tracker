@@ -11,7 +11,9 @@ import streamlit as st
 
 import backtest as bt
 import bot_dashboard
+import conditions
 import event_study as es
+import fed_events as fed
 import fetch_prices
 import inventory_events as inv
 import market_data as md
@@ -31,7 +33,8 @@ PCT = "%+.1f%%"
 def get_data():
     # Download fresh data. If a source is temporarily down, carry on with
     # the copy we already have (if any) rather than crashing the site.
-    for download in (fetch_prices.main, inv.download_inventories, md.main):
+    for download in (fetch_prices.main, inv.download_inventories, md.main,
+                     fed.download_fed):
         try:
             download()
         except Exception as error:
@@ -40,13 +43,14 @@ def get_data():
     opec = es.compute_results(prices, es.load_events())
     inv_events = inv.build_events(inv.load_inventories())
     inventory = es.compute_results(prices, inv_events)
+    fed_results = es.compute_results(prices, fed.build_events(fed.load_fed()))
     features = strat.build_features(prices)
     backtests = bt.run_all(features)
-    return prices, opec, inventory, inv_events, features, backtests
+    return prices, opec, inventory, inv_events, fed_results, features, backtests
 
 
 (prices, (opec_results, opec_paths), (inv_results, inv_paths), inv_events,
- features, (bt_results, bt_metrics)) = get_data()
+ (fed_results, fed_paths), features, (bt_results, bt_metrics)) = get_data()
 
 STRATEGY_COLORS = {"buy_and_hold": "#898781", "trend_200d": "#2a78d6",
                    "big_build_rebound": "#eb6834", "tight_inventories": "#1baf7a",
@@ -177,18 +181,23 @@ latest_date, latest_price = prices.index[-1], prices.iloc[-1]
 col1, col2, col3 = st.columns(3)
 col1.metric("Brent crude (latest close)", f"${latest_price:.2f}",
             f"{(latest_price / prices.iloc[-6] - 1) * 100:+.1f}% over 5 trading days")
-col2.metric("Events analysed", f"{len(opec_results) + len(inv_results):,}",
-            f"{len(opec_results)} OPEC+ · {len(inv_results):,} EIA reports",
+col2.metric("Events analysed",
+            f"{len(opec_results) + len(inv_results) + len(fed_results):,}",
+            f"{len(opec_results)} OPEC+ · {len(inv_results):,} EIA · {len(fed_results)} Fed",
             delta_color="off")
 col3.metric("Price history", f"{prices.index[0].year}–{latest_date.year}",
             f"updated {latest_date:%b %d, %Y}", delta_color="off")
 
-tab_bot, tab_lab, tab_inv, tab_opec, tab_about = st.tabs(
-    ["🤖 Paper trading bots", "🧪 Strategy lab", "📦 EIA weekly inventories",
-     "🛢️ OPEC+ decisions", "ℹ️ How this works"])
+tab_bot, tab_cond, tab_lab, tab_inv, tab_opec, tab_fed, tab_about = st.tabs(
+    ["🤖 Paper trading bots", "🌡️ Market conditions", "🧪 Strategy lab",
+     "📦 EIA weekly inventories", "🛢️ OPEC+ decisions", "🏦 Fed rate decisions",
+     "ℹ️ How this works"])
 
 with tab_bot:
     bot_dashboard.render()
+
+with tab_cond:
+    conditions.render(features)
 
 # ---------------------------------------------------------------------------
 # Tab 0: Strategy lab - backtests of simple rules
@@ -314,6 +323,35 @@ with tab_opec:
     })
 
 # ---------------------------------------------------------------------------
+# Fed rate decisions
+# ---------------------------------------------------------------------------
+with tab_fed:
+    st.markdown("""
+Every change in the Federal Reserve's target interest rate since 1990. Rate
+moves affect oil through the economy (demand) and the dollar. We separate the
+**first move of a new cycle** (a turn in policy, often a reaction to trouble or
+a boom) from moves that **continue** a cycle. The Fed usually cuts when the economy
+weakens and hikes when it's running hot, so these results largely reflect the
+economy that prompted the decision.
+""")
+    st.header("Average reaction by type of rate change")
+    comparison_section(fed_results, fed_paths, "decision", fed.CATEGORIES,
+                       fed.LABELS, fed.COLORS, key="fed")
+
+    st.header("Explore individual rate changes")
+    drilldown_section(fed_results, fed_paths, "decision", fed.CATEGORIES,
+                      fed.LABELS, fed.COLORS, key="fed", table_columns={
+        "effective_date": st.column_config.DateColumn("Effective", format="YYYY-MM-DD"),
+        "size_bp": st.column_config.NumberColumn("Change (bp)", format="%+d"),
+        "new_rate": st.column_config.NumberColumn("New rate", format="%.2f%%"),
+        **HORIZON_COLUMNS,
+        "description": st.column_config.TextColumn("What happened", width="large"),
+    })
+    st.caption("Measured from the close two business days before the change took effect "
+               "(the day before the announcement or earlier), so the reaction is never "
+               "missed. Meetings where the Fed held rates aren't included.")
+
+# ---------------------------------------------------------------------------
 # Tab 3: Method & caveats
 # ---------------------------------------------------------------------------
 with tab_about:
@@ -325,6 +363,17 @@ with tab_about:
 - **OPEC+ decisions:** a hand-verified list of major decisions since 1999.
 - **Positioning:** CFTC Commitments of Traders, "managed money" in NYMEX WTI.
 - **Dollar:** Federal Reserve broad U.S. dollar index, via FRED.
+- **Fed rate decisions:** the Fed's target rate (upper end of the range since
+  2008), via FRED. Each change since 1990 is one event.
+- **Bots:** live prices and the paper account from Alpaca.
+
+### Market conditions
+- Each indicator's reading is placed in one of five equal-sized buckets based on
+  every trading day since 2007; we show Brent's average move over the next 20
+  trading days for days in the same bucket.
+- "Most similar days" compares all six indicators at once (each scaled by its
+  normal range) and picks the 15 closest past days, at least 20 trading days apart.
+- This is descriptive context, not a tested trading rule.
 
 ### Strategy backtests
 - Each rule only uses data that was public at the time: inventory reports from

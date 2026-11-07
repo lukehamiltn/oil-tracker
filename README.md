@@ -1,7 +1,8 @@
 # Oil Tracker
 
-A website that tracks oil market prices and news events, and shows how the
-market reacted to similar events in the past.
+Research tools for the oil market: how prices reacted to past events, which
+simple trading rules held up in backtests, how today's conditions compare with
+history, and two paper-trading bots running on live prices.
 
 **Live site: https://oil-tracker-q7rqjuftmvvqnrgbkzwjcd.streamlit.app/**
 
@@ -9,12 +10,20 @@ market reacted to similar events in the past.
 
 > "When news like *this* happened before, here's what oil did next."
 
-## Data sources (planned)
+## Data sources
 
-- **Prices:** WTI and Brent crude daily prices (EIA / FRED, public data)
+All free; government data unless noted.
+
+- **Prices:** Brent and WTI daily spot prices (EIA, via FRED)
 - **Inventories:** EIA weekly U.S. crude stocks (public spreadsheet, no API key)
-- **Scheduled events:** OPEC+ decisions (verified list), Fed rate decisions (planned)
-- **News:** GDELT global news database
+- **OPEC+ decisions:** hand-verified list in `events/opec_decisions.csv`
+- **Fed rate decisions:** Fed target rate (FRED `DFEDTAR` / `DFEDTARU`)
+- **Positioning:** CFTC Commitments of Traders, managed money in NYMEX WTI
+- **Dollar:** Federal Reserve broad dollar index (FRED `DTWEXBGS`)
+- **Live prices and paper account:** Alpaca (BNO fund)
+
+EIA stopped publishing NYMEX futures prices in April 2024, so there is no free
+current futures curve.
 
 ## How to run
 
@@ -23,32 +32,36 @@ market reacted to similar events in the past.
 python -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements.txt
 
-# download / refresh oil prices into data/oil.db
-.venv\Scripts\python.exe fetch_prices.py
+# download / refresh data into data/oil.db
+.venv\Scripts\python.exe fetch_prices.py        # Brent and WTI prices
+.venv\Scripts\python.exe inventory_events.py    # EIA weekly inventories
+.venv\Scripts\python.exe market_data.py         # CFTC positioning + dollar index
+.venv\Scripts\python.exe fed_events.py          # Fed rate changes
 
-# draw a chart to data/oil_prices.png
-.venv\Scripts\python.exe plot_prices.py
+# analysis
+.venv\Scripts\python.exe event_study.py         # OPEC+ event study
+.venv\Scripts\python.exe backtest.py            # backtest rules in strategies.py
+.venv\Scripts\python.exe plot_prices.py         # price chart to data/oil_prices.png
 
-# download EIA weekly crude inventories and classify each report
-.venv\Scripts\python.exe inventory_events.py
-
-# download CFTC positioning and the dollar index
-.venv\Scripts\python.exe market_data.py
-
-# backtest the trading rules in strategies.py
-.venv\Scripts\python.exe backtest.py
-
-# paper-trading bot (needs Alpaca paper keys in .env); --dry-run places no orders
+# paper-trading bots (needs Alpaca paper keys in .env); --dry-run places no orders
 .venv\Scripts\python.exe bot.py --dry-run
-
-# measure how oil moved after OPEC+ decisions (events/opec_decisions.csv)
-.venv\Scripts\python.exe event_study.py
 
 # start the website, then open http://localhost:8501 (Ctrl+C to stop)
 .venv\Scripts\streamlit.exe run app.py
 ```
 
-## Paper trading bot
+## Website tabs
+
+| Tab | File | What it shows |
+|---|---|---|
+| Paper trading bots | `bot_dashboard.py` | Both bots' value, positions, trades vs holding BNO |
+| Market conditions | `conditions.py` | Today's indicators vs history, and the most similar past days |
+| Strategy lab | `backtest.py`, `strategies.py` | Backtests, 2007-2016 build vs 2017-now test |
+| EIA inventories | `inventory_events.py` | Reaction to weekly inventory surprises |
+| OPEC+ decisions | `event_study.py` | Reaction to OPEC+ decisions |
+| Fed rate decisions | `fed_events.py` | Reaction to Fed rate changes |
+
+## Paper trading bots
 
 `bot.py` runs two bots ($50k each, labelled orders in one Alpaca paper account):
 *Weak dollar* (own BNO while the dollar is below its 50-day average) and *Trend*
@@ -57,14 +70,14 @@ weekdays near the close via GitHub Actions (`.github/workflows/bot.yml`).
 
 Keys are never committed. They live in:
 - `.env` locally (`ALPACA_API_KEY=...`, `ALPACA_SECRET_KEY=...`)
-- GitHub: Settings → Secrets and variables → Actions (for the bot)
+- GitHub: Settings → Secrets and variables → Actions (for the bots)
 - Streamlit Cloud: app Settings → Secrets (for the website's bot tab)
 
 ## Roadmap
 
-1. [x] Project setup
-2. [x] Price pipeline: download and store historical oil prices
-3. [x] Event database: OPEC+ decisions 1999-2025 (verified)
-4. [x] Analysis: market reaction after similar events
-5. [x] Website v1 (Streamlit)
-6. [ ] Public launch: hosting, user accounts
+1. [x] Price pipeline, event studies (EIA, OPEC+, Fed), website
+2. [x] Backtester with out-of-sample test
+3. [x] Paper-trading bots on live prices
+4. [x] Market conditions page
+5. [ ] News: GDELT geopolitical events
+6. [ ] Custom domain / paid hosting
