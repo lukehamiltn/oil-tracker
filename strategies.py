@@ -42,6 +42,12 @@ def dollar_trend(dollar: pd.Series, days: pd.DatetimeIndex) -> pd.Series:
     return _as_of(trend, dollar.index + pd.Timedelta(days=7), days)
 
 
+def trend_gap(prices: pd.Series) -> pd.Series:
+    """% the price is above (+) or below (-) its 200-day average.
+    Shared by the backtest and the live bot."""
+    return (prices / prices.rolling(200).mean() - 1) * 100
+
+
 def build_features(prices: pd.Series | None = None) -> pd.DataFrame:
     """One row per trading day with everything a strategy may look at."""
     prices = es.load_prices() if prices is None else prices
@@ -49,6 +55,7 @@ def build_features(prices: pd.Series | None = None) -> pd.DataFrame:
     f = pd.DataFrame(index=days)
     f["price"] = prices
     f["sma200"] = prices.rolling(200).mean()
+    f["trend_gap_pct"] = trend_gap(prices)
 
     # --- EIA inventories ---------------------------------------------------
     stocks = inv.load_inventories()
@@ -93,7 +100,8 @@ def buy_and_hold(f: pd.DataFrame) -> pd.Series:
 
 def trend_200d(f: pd.DataFrame) -> pd.Series:
     """Own oil only while its price is above its 200-day average."""
-    return (f["price"] > f["sma200"]).astype(float).where(f["sma200"].notna())
+    gap = f["trend_gap_pct"]
+    return (gap > 0).astype(float).where(gap.notna())
 
 
 def big_build_rebound(f: pd.DataFrame, hold_days: int = 4) -> pd.Series:

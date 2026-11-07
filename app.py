@@ -10,7 +10,6 @@ import plotly.graph_objects as go
 import streamlit as st
 
 import backtest as bt
-import bot
 import bot_dashboard
 import event_study as es
 import fetch_prices
@@ -185,11 +184,11 @@ col3.metric("Price history", f"{prices.index[0].year}–{latest_date.year}",
             f"updated {latest_date:%b %d, %Y}", delta_color="off")
 
 tab_bot, tab_lab, tab_inv, tab_opec, tab_about = st.tabs(
-    ["🤖 Paper trading bot", "🧪 Strategy lab", "📦 EIA weekly inventories",
+    ["🤖 Paper trading bots", "🧪 Strategy lab", "📦 EIA weekly inventories",
      "🛢️ OPEC+ decisions", "ℹ️ How this works"])
 
 with tab_bot:
-    bot_dashboard.render(bot.current_reading())
+    bot_dashboard.render()
 
 # ---------------------------------------------------------------------------
 # Tab 0: Strategy lab - backtests of simple rules
