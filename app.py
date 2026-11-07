@@ -176,8 +176,9 @@ HORIZON_COLUMNS = {
 # ---------------------------------------------------------------------------
 title_col, about_col = st.columns([5, 1], vertical_alignment="center")
 title_col.title("🛢️ Oil Tracker")
-# The pop-up itself is defined at the bottom of this file (show_about)
-about_clicked = about_col.button("ℹ️ How this works", width="stretch")
+# A popover opens instantly in the browser (no page re-run). Its text is
+# filled in at the bottom of this file.
+about_popover = about_col.popover("ℹ️ How this works", width="stretch")
 st.markdown("**When news like this happened before, what did oil do next?**")
 
 latest_date, latest_price = prices.index[-1], prices.iloc[-1]
@@ -354,10 +355,9 @@ economy that prompted the decision.
                "missed. Meetings where the Fed held rates aren't included.")
 
 # ---------------------------------------------------------------------------
-# "How this works" pop-up (opened by the button next to the title)
+# "How this works" text, shown in the popover next to the title
 # ---------------------------------------------------------------------------
-@st.dialog("How this works", width="large")
-def show_about():
+with about_popover:
     st.markdown("""
 ### Data
 - **Prices:** daily Brent crude spot prices from the U.S. EIA, via FRED.
@@ -407,7 +407,3 @@ def show_about():
   three more reports, so 1-month inventory results are mostly noise.
 - Past reactions don't guarantee future ones. **Not investment advice.**
 """)
-
-
-if about_clicked:
-    show_about()
