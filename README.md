@@ -32,6 +32,12 @@ python -m venv .venv
 # download EIA weekly crude inventories and classify each report
 .venv\Scripts\python.exe inventory_events.py
 
+# download CFTC positioning and the dollar index
+.venv\Scripts\python.exe market_data.py
+
+# backtest the trading rules in strategies.py
+.venv\Scripts\python.exe backtest.py
+
 # measure how oil moved after OPEC+ decisions (events/opec_decisions.csv)
 .venv\Scripts\python.exe event_study.py
 

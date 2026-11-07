@@ -9,9 +9,12 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+import backtest as bt
 import event_study as es
 import fetch_prices
 import inventory_events as inv
+import market_data as md
+import strategies as strat
 
 st.set_page_config(page_title="Oil Tracker", page_icon="🛢️", layout="wide")
 
@@ -27,7 +30,7 @@ PCT = "%+.1f%%"
 def get_data():
     # Download fresh data. If a source is temporarily down, carry on with
     # the copy we already have (if any) rather than crashing the site.
-    for download in (fetch_prices.main, inv.download_inventories):
+    for download in (fetch_prices.main, inv.download_inventories, md.main):
         try:
             download()
         except Exception as error:
@@ -36,10 +39,17 @@ def get_data():
     opec = es.compute_results(prices, es.load_events())
     inv_events = inv.build_events(inv.load_inventories())
     inventory = es.compute_results(prices, inv_events)
-    return prices, opec, inventory, inv_events
+    features = strat.build_features(prices)
+    backtests = bt.run_all(features)
+    return prices, opec, inventory, inv_events, features, backtests
 
 
-prices, (opec_results, opec_paths), (inv_results, inv_paths), inv_events = get_data()
+(prices, (opec_results, opec_paths), (inv_results, inv_paths), inv_events,
+ features, (bt_results, bt_metrics)) = get_data()
+
+STRATEGY_COLORS = {"buy_and_hold": "#898781", "trend_200d": "#2a78d6",
+                   "big_build_rebound": "#eb6834", "tight_inventories": "#1baf7a",
+                   "crowded_short": "#eda100", "weak_dollar": "#e87ba4"}
 
 
 # ---------------------------------------------------------------------------
@@ -172,8 +182,78 @@ col2.metric("Events analysed", f"{len(opec_results) + len(inv_results):,}",
 col3.metric("Price history", f"{prices.index[0].year}–{latest_date.year}",
             f"updated {latest_date:%b %d, %Y}", delta_color="off")
 
-tab_inv, tab_opec, tab_about = st.tabs(
-    ["📦 EIA weekly inventories", "🛢️ OPEC+ decisions", "ℹ️ How this works"])
+tab_lab, tab_inv, tab_opec, tab_about = st.tabs(
+    ["🧪 Strategy lab", "📦 EIA weekly inventories", "🛢️ OPEC+ decisions",
+     "ℹ️ How this works"])
+
+# ---------------------------------------------------------------------------
+# Tab 0: Strategy lab - backtests of simple rules
+# ---------------------------------------------------------------------------
+with tab_lab:
+    st.markdown("""
+Each strategy is a simple rule that decides, at every day's close, whether to
+**own oil or sit in cash**, using only information that was public by then.
+We charge 0.10% every time it buys or sells. Rules were designed on
+**2007–2016** and then checked on **2017–now**, a period they never saw.
+A rule that only works in the first period was probably luck.
+""")
+
+    # What each rule says today
+    today = features.iloc[-1]
+    st.subheader(f"What each rule says now (as of {features.index[-1]:%b %d, %Y})")
+    readings = {
+        "trend_200d": f"Brent ${today['price']:.2f} vs 200-day avg ${today['sma200']:.2f}",
+        "big_build_rebound": "Last report: " + inv.LABELS[inv_events.iloc[-1]["category"]],
+        "tight_inventories": f"U.S. stocks {today['inv_vs_normal_pct']:+.1f}% vs normal",
+        "crowded_short": f"Hedge-fund positioning at {today['mm_positioning_rank']:.0%} "
+                         "of its 3-year range",
+        "weak_dollar": f"Dollar {today['dollar_vs_50d_pct']:+.1f}% vs its 50-day avg",
+    }
+    cols = st.columns(len(readings))
+    for col, (key, reading) in zip(cols, readings.items()):
+        owns = bt_results[key]["position"].iloc[-1] > 0
+        col.metric(strat.STRATEGIES[key][0], "Own oil" if owns else "Cash",
+                   reading, delta_color="off")
+
+    # Growth of $10,000
+    st.subheader("Growth of $10,000")
+    fig = go.Figure()
+    for key, res in bt_results.items():
+        equity = 10_000 * (1 + res["return"]).cumprod()
+        fig.add_trace(go.Scatter(
+            x=equity.index, y=equity.values, mode="lines",
+            name=strat.STRATEGIES[key][0],
+            line=dict(color=STRATEGY_COLORS[key],
+                      width=1.5 if key == "buy_and_hold" else 2,
+                      dash="dot" if key == "buy_and_hold" else "solid"),
+            hovertemplate="$%{y:,.0f}"))
+    fig.add_vline(x=pd.Timestamp(bt.SPLIT), line_color="#898781", line_dash="dot",
+                  annotation_text="test period starts →", annotation_font_size=11,
+                  annotation_font_color="#898781")
+    fig.update_layout(height=470, margin=dict(l=10, r=10, t=30, b=10),
+                      hovermode="x unified", yaxis_type="log",
+                      yaxis_title="Value (log scale)", yaxis_tickprefix="$",
+                      legend=dict(orientation="h", yanchor="top", y=-0.1, x=0))
+    st.plotly_chart(fig, width="stretch", key="lab_equity")
+    st.caption("Log scale: equal vertical distances = equal % gains. "
+               "Based on Brent spot prices; real trading via futures or ETFs differs.")
+
+    period = st.radio("Period", ["Test 2017-now", "Build 2007-2016"], horizontal=True,
+                      key="lab_period")
+    table = bt_metrics[bt_metrics["period"] == period].set_index("label")[
+        ["annual_return_pct", "annual_volatility_pct", "sharpe", "max_drawdown_pct",
+         "time_in_market_pct", "trades"]]
+    st.dataframe(table, width="stretch", key="lab_table", column_config={
+        "annual_return_pct": st.column_config.NumberColumn("Return / year", format=PCT),
+        "annual_volatility_pct": st.column_config.NumberColumn("Volatility", format="%.1f%%"),
+        "sharpe": st.column_config.NumberColumn("Sharpe", format="%.2f",
+            help="Return per unit of risk. Higher is better; above ~0.5 is decent."),
+        "max_drawdown_pct": st.column_config.NumberColumn("Worst drop", format="%.1f%%"),
+        "time_in_market_pct": st.column_config.NumberColumn("Time owning oil", format="%.0f%%"),
+        "trades": st.column_config.NumberColumn("Trades"),
+    })
+    st.caption("Compare each rule with buy-and-hold in the same period. "
+               "Research only: past results don't predict future ones. Not investment advice.")
 
 # ---------------------------------------------------------------------------
 # Tab 1: EIA weekly inventory reports
@@ -239,6 +319,18 @@ with tab_about:
 - **Inventories:** EIA *Weekly U.S. Ending Stocks of Crude Oil* (excluding the
   Strategic Petroleum Reserve), reports since 2006.
 - **OPEC+ decisions:** a hand-verified list of major decisions since 1999.
+- **Positioning:** CFTC Commitments of Traders, "managed money" in NYMEX WTI.
+- **Dollar:** Federal Reserve broad U.S. dollar index, via FRED.
+
+### Strategy backtests
+- Each rule only uses data that was public at the time: inventory reports from
+  their release day, CFTC positioning from the Monday after release, and the
+  dollar index one week after its date.
+- A position chosen at a day's close earns the next day's price change.
+  0.10% is charged per buy or sell.
+- Settings were fixed using 2007–2016; 2017–now is an out-of-sample test.
+- Brent spot prices aren't directly tradable. Funds and futures that track oil
+  have extra costs (e.g. rolling contracts), so real results would differ.
 
 ### Method
 - **Starting point:** the closing price on the last trading day *before* each
