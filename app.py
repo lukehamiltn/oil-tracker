@@ -174,7 +174,10 @@ HORIZON_COLUMNS = {
 # ---------------------------------------------------------------------------
 # Header
 # ---------------------------------------------------------------------------
-st.title("🛢️ Oil Tracker")
+title_col, about_col = st.columns([5, 1], vertical_alignment="center")
+title_col.title("🛢️ Oil Tracker")
+# The pop-up itself is defined at the bottom of this file (show_about)
+about_clicked = about_col.button("ℹ️ How this works", width="stretch")
 st.markdown("**When news like this happened before, what did oil do next?**")
 
 latest_date, latest_price = prices.index[-1], prices.iloc[-1]
@@ -188,10 +191,9 @@ col2.metric("Events analysed",
 col3.metric("Price history", f"{prices.index[0].year}–{latest_date.year}",
             f"updated {latest_date:%b %d, %Y}", delta_color="off")
 
-tab_bot, tab_cond, tab_lab, tab_inv, tab_opec, tab_fed, tab_about = st.tabs(
+tab_bot, tab_cond, tab_lab, tab_inv, tab_opec, tab_fed = st.tabs(
     ["🤖 Paper trading bots", "🌡️ Market conditions", "🧪 Strategy lab",
-     "📦 EIA weekly inventories", "🛢️ OPEC+ decisions", "🏦 Fed rate decisions",
-     "ℹ️ How this works"])
+     "📦 EIA weekly inventories", "🛢️ OPEC+ decisions", "🏦 Fed rate decisions"])
 
 with tab_bot:
     bot_dashboard.render()
@@ -352,9 +354,10 @@ economy that prompted the decision.
                "missed. Meetings where the Fed held rates aren't included.")
 
 # ---------------------------------------------------------------------------
-# Tab 3: Method & caveats
+# "How this works" pop-up (opened by the button next to the title)
 # ---------------------------------------------------------------------------
-with tab_about:
+@st.dialog("How this works", width="large")
+def show_about():
     st.markdown("""
 ### Data
 - **Prices:** daily Brent crude spot prices from the U.S. EIA, via FRED.
@@ -404,3 +407,7 @@ with tab_about:
   three more reports, so 1-month inventory results are mostly noise.
 - Past reactions don't guarantee future ones. **Not investment advice.**
 """)
+
+
+if about_clicked:
+    show_about()
