@@ -33,6 +33,15 @@ def _as_of(values: pd.Series, known_from: pd.DatetimeIndex,
     return pd.Series(merged["value"].values, index=days)
 
 
+def dollar_trend(dollar: pd.Series, days: pd.DatetimeIndex) -> pd.Series:
+    """% the dollar index is above (+) or below (-) its 50-day average, as it
+    was publicly known on each of `days` (the Fed publishes weekly, so each
+    value is treated as known 7 days after its date). Used by the backtest
+    AND the live bot, so both follow exactly the same rule."""
+    trend = (dollar / dollar.rolling(50).mean() - 1) * 100
+    return _as_of(trend, dollar.index + pd.Timedelta(days=7), days)
+
+
 def build_features(prices: pd.Series | None = None) -> pd.DataFrame:
     """One row per trading day with everything a strategy may look at."""
     prices = es.load_prices() if prices is None else prices
@@ -70,10 +79,7 @@ def build_features(prices: pd.Series | None = None) -> pd.DataFrame:
     f["mm_positioning_rank"] = _as_of(pct, known, days)
 
     # --- Dollar ------------------------------------------------------------
-    dollar = md.load_dollar()
-    dollar_trend = dollar / dollar.rolling(50).mean() - 1
-    f["dollar_vs_50d_pct"] = _as_of(dollar_trend * 100,
-                                    dollar.index + pd.Timedelta(days=7), days)
+    f["dollar_vs_50d_pct"] = dollar_trend(md.load_dollar(), days)
     return f
 
 

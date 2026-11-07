@@ -38,12 +38,26 @@ python -m venv .venv
 # backtest the trading rules in strategies.py
 .venv\Scripts\python.exe backtest.py
 
+# paper-trading bot (needs Alpaca paper keys in .env); --dry-run places no orders
+.venv\Scripts\python.exe bot.py --dry-run
+
 # measure how oil moved after OPEC+ decisions (events/opec_decisions.csv)
 .venv\Scripts\python.exe event_study.py
 
 # start the website, then open http://localhost:8501 (Ctrl+C to stop)
 .venv\Scripts\streamlit.exe run app.py
 ```
+
+## Paper trading bot
+
+`bot.py` trades fake money in an Alpaca paper account using the *Weak dollar*
+rule (own BNO while the U.S. dollar is below its 50-day average). It runs on
+weekdays near the close via GitHub Actions (`.github/workflows/bot.yml`).
+
+Keys are never committed. They live in:
+- `.env` locally (`ALPACA_API_KEY=...`, `ALPACA_SECRET_KEY=...`)
+- GitHub: Settings → Secrets and variables → Actions (for the bot)
+- Streamlit Cloud: app Settings → Secrets (for the website's bot tab)
 
 ## Roadmap
 
