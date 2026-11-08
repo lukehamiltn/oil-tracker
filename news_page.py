@@ -157,25 +157,19 @@ def render(prices: pd.Series, data: dict) -> None:
 
     # ---- 2. Latest headlines ---------------------------------------------------
     ui.eyebrow("Latest headlines")
-    st.subheader("Today's oil news, tagged by topic", anchor=False)
+    st.subheader("Today's oil news", anchor=False)
     heads, is_live = latest_headlines(archive) if not archive.empty else (pd.DataFrame(), False)
     if not heads.empty:
-        if not is_live:
-            st.caption(f"The live feed didn't respond, so these are the newest saved "
-                       f"headlines (to {heads['time'].max():%b %d, %H:%M} UTC).")
         heads = heads.assign(tagged=heads["topics"].str.len() > 0).sort_values(
-            ["tagged", "time"], ascending=[False, False]).head(15)
-        headline_list(heads)
-        st.caption("Market news from Benzinga via Alpaca. Click to read the original article.")
-    else:
-        st.info("Headlines are temporarily unavailable; the rest of the page works as normal.")
+            ["tagged", "time"], ascending=[False, False])
+    headlines_section(heads, is_live, archive)
 
     # ---- 3. Like this before -------------------------------------------------------
     if not archive.empty:
         st.write("")
         ui.eyebrow("Like this before")
         st.subheader("Has a story like this happened before?", anchor=False)
-        like_this_before(prices, archive, heads)
+        like_this_before(prices, archive, heads.head(15))
 
     # ---- 4. Explore a topic -----------------------------------------------------
     st.write("")
@@ -199,6 +193,35 @@ def render(prices: pd.Series, data: dict) -> None:
     ui.eyebrow("Search the past")
     st.subheader("Look up any news theme", anchor=False)
     search_section(prices, archive)
+
+
+@st.fragment
+def headlines_section(heads: pd.DataFrame, is_live: bool, archive: pd.DataFrame) -> None:
+    """Today's headlines, or - when a topic is picked - the latest stories of
+    that kind, going back through the archive if today was quiet."""
+    topic = st.pills("Show only", TOPIC_KEYS, format_func=lambda k: LABELS[k],
+                     key="headline_topic")
+    if topic:
+        pool = pd.concat([heads, mn.oil_related(archive)], ignore_index=True)
+        pool = pool.drop_duplicates("headline")
+        shown = pool[pool["topics"].map(lambda ts: topic in ts)].sort_values(
+            "time", ascending=False).head(15)
+        if shown.empty:
+            st.info(f"No stories about {LABELS[topic].lower()} yet.")
+            return
+        st.caption(f"The latest {len(shown)} stories tagged *{LABELS[topic]}*, newest "
+                   f"first, going back to {shown['time'].min():%b %d, %Y}.")
+        headline_list(shown)
+    elif not heads.empty:
+        if not is_live:
+            st.caption(f"The live feed didn't respond, so these are the newest saved "
+                       f"headlines (to {heads['time'].max():%b %d, %H:%M} UTC).")
+        headline_list(heads.head(15))
+    else:
+        st.info("Headlines are temporarily unavailable; the rest of the page works as normal.")
+        return
+    st.caption("Market news from Benzinga via Alpaca. Tags are assigned by keyword, so a "
+               "few stories may be tagged imperfectly. Click a headline to read the article.")
 
 
 MATCH_TABLE = {
