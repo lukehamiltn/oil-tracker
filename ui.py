@@ -61,6 +61,33 @@ def chip(text: str, color: str) -> str:
     return f'<span class="chip" style="background:{color}">{text}</span>'
 
 
+def topic_picker(label: str, options: list, labels: dict, colors: dict, key: str,
+                 default=None, none_text: str = "") -> str | None:
+    """A compact button that opens a panel of chips, each in its topic's own
+    colour (Streamlit menus can only show plain text, so the chips are
+    coloured here with CSS, by their position in the group). The current
+    choice is shown as a chip beside the button."""
+    rules = []
+    for i, option in enumerate(options):
+        c = colors[option]
+        chip_css = f'.st-key-{key} button[data-variant="pills"]:nth-child({i + 1})'
+        rules.append(
+            f'{chip_css} {{ background:{c} !important; border-color:{c} !important; opacity:.6; }}'
+            f'{chip_css}, {chip_css} * {{ color:#fff !important; }}'
+            f'{chip_css}:hover {{ opacity:.85; }}'
+            f'{chip_css}[aria-checked="true"] {{ opacity:1; '
+            f'box-shadow:0 0 0 2px #fff, 0 0 0 4px {c}; }}')
+    st.html("<style>" + "".join(rules) + "</style>")
+    left, right = st.columns([1, 3], vertical_alignment="center")
+    with left.popover(label, width="stretch"):
+        picked = st.pills(label, options, format_func=labels.get, key=key,
+                          default=default, label_visibility="collapsed")
+    chosen = picked or default
+    right.markdown(chip(labels[chosen], colors[chosen]) if chosen else
+                   f'<span style="color:#898781">{none_text}</span>', unsafe_allow_html=True)
+    return chosen
+
+
 # ---------------------------------------------------------------------------
 # Charts
 # ---------------------------------------------------------------------------

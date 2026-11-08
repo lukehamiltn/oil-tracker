@@ -22,7 +22,6 @@ import ui
 TOPIC_KEYS = list(news.TOPICS)
 LABELS = {k: t["label"] for k, t in news.TOPICS.items()}
 COLORS = {k: t["color"] for k, t in news.TOPICS.items()}
-MENU = {k: f'{t["dot"]}  {t["label"]}' for k, t in news.TOPICS.items()}
 SOURCE_NAMES = {"gdelt": "Worldwide news (GDELT, since 2017)",
                 "market": "Market news (Benzinga, since 2015)"}
 EXAMPLES = ['"Strait of Hormuz"', "Houthi", "refinery fire", "Abqaiq", "Libya",
@@ -200,8 +199,8 @@ def render(prices: pd.Series, data: dict) -> None:
 def headlines_section(heads: pd.DataFrame, is_live: bool, archive: pd.DataFrame) -> None:
     """Today's headlines, or - when a topic is picked - the latest stories of
     that kind, going back through the archive if today was quiet."""
-    topic = st.selectbox("Show", [None] + TOPIC_KEYS, key="headline_topic",
-                         format_func=lambda k: MENU[k] if k else "All of today's news")
+    topic = ui.topic_picker("Filter by topic", TOPIC_KEYS, LABELS, COLORS, key="headline_topic",
+                            none_text="Showing all of today's news")
     if topic:
         pool = pd.concat([heads, mn.oil_related(archive)], ignore_index=True)
         pool = pool.drop_duplicates("headline")
@@ -291,9 +290,9 @@ def like_this_before(prices, archive, heads) -> None:
 
 @st.fragment
 def explore_topic(prices, data) -> None:
-    c1, c2 = st.columns([1, 1])
-    topic = c1.selectbox("Topic", TOPIC_KEYS, format_func=MENU.get, key="news_topic")
-    source = c2.segmented_control("News source", list(SOURCE_NAMES), default="gdelt",
+    topic = ui.topic_picker("Change topic", TOPIC_KEYS, LABELS, COLORS, key="news_topic",
+                            default=TOPIC_KEYS[0])
+    source = st.segmented_control("News source", list(SOURCE_NAMES), default="gdelt",
                                   format_func=lambda k: SOURCE_NAMES[k],
                                   key="news_source") or "gdelt"
     timelines = data["timelines"] if source == "gdelt" else data["market_timelines"]
