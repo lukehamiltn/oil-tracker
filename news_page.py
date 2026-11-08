@@ -170,7 +170,14 @@ def render(prices: pd.Series, data: dict) -> None:
     else:
         st.info("Headlines are temporarily unavailable; the rest of the page works as normal.")
 
-    # ---- 3. Explore a topic -----------------------------------------------------
+    # ---- 3. Like this before -------------------------------------------------------
+    if not archive.empty:
+        st.write("")
+        ui.eyebrow("Like this before")
+        st.subheader("Has a story like this happened before?", anchor=False)
+        like_this_before(prices, archive, heads)
+
+    # ---- 4. Explore a topic -----------------------------------------------------
     st.write("")
     ui.eyebrow("Explore a topic")
     st.subheader("Past news spikes and how oil reacted", anchor=False)
@@ -192,6 +199,70 @@ def render(prices: pd.Series, data: dict) -> None:
     ui.eyebrow("Search the past")
     st.subheader("Look up any news theme", anchor=False)
     search_section(prices, archive)
+
+
+MATCH_TABLE = {
+    "day": st.column_config.DateColumn("Date", format="YYYY-MM-DD"),
+    "headline": st.column_config.TextColumn("Past headline", width="large"),
+    "score": st.column_config.ProgressColumn("Similarity", format="%.2f", min_value=0,
+                                             max_value=1),
+    **ui.HORIZON_COLUMNS,
+    "url": st.column_config.LinkColumn("Article", display_text="Open"),
+}
+
+
+@st.cache_resource(show_spinner="Indexing past headlines...")
+def matcher(_archive: pd.DataFrame, version: str):
+    """Built once per archive version (it changes when new news is saved)."""
+    return mn.build_matcher(_archive)
+
+
+@st.cache_data(ttl=6 * 60 * 60, show_spinner=False, max_entries=300)
+def past_matches(text: str, before: pd.Timestamp, _archive: pd.DataFrame,
+                 _prices: pd.Series, version: str):
+    found = mn.similar(matcher(_archive, version), text, before)
+    if found.empty:
+        return found, {}
+    found = found.assign(date=found["day"], description=found["headline"])
+    return es.compute_results(_prices, found)
+
+
+@st.fragment
+def like_this_before(prices, archive, heads) -> None:
+    st.caption("Pick one of today's headlines, or type your own. We find the past stories "
+               "worded most like it, and show what Brent did after each one.")
+    options = heads["headline"].tolist() if not heads.empty else []
+    c1, c2 = st.columns([3, 2], vertical_alignment="bottom")
+    picked = c1.selectbox("Today's headline", options, index=0 if options else None,
+                          placeholder="No headlines right now", key="like_pick")
+    typed = c2.text_input("Or type a headline", key="like_typed",
+                          placeholder="e.g. Drone attack hits Saudi oil facility")
+    text = typed.strip() or picked
+    if not text:
+        return
+    before = pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=14)
+    if not typed.strip() and not heads.empty:
+        row = heads[heads["headline"] == picked]
+        if len(row):   # only stories from at least two weeks before this one
+            before = row["time"].iloc[0] - pd.Timedelta(days=14)
+    version = f"{len(archive)}-{archive['time'].max()}"
+    results, paths = past_matches(text, before, archive, prices, version)
+    if results.empty:
+        st.info("No past stories are worded closely enough to compare. Try a more "
+                "specific headline (names of places, companies or events help most).")
+        return
+    day, week, month = results["day_1_pct"], results["day_5_pct"], results["day_20_pct"]
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Similar past stories", len(results), border=True)
+    m2.metric("Brent next day: average", f"{day.mean():+.1f}%", border=True)
+    m3.metric("Brent a week later: average", f"{week.mean():+.1f}%",
+              f"rose {(week > 0).mean():.0%} of the time", delta_color="off", border=True)
+    m4.metric("Brent a month later: average", f"{month.mean():+.1f}%",
+              f"rose {(month > 0).mean():.0%} of the time", delta_color="off", border=True)
+    ui.event_paths(results, paths, "#2a78d6", MATCH_TABLE, key="like_paths")
+    st.caption("Similarity is based on shared wording (rare words like place and company "
+               "names count most), so check the headlines to judge how alike the stories "
+               "really are. With about 10 matches, one big move can swing the average.")
 
 
 @st.fragment

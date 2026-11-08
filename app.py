@@ -251,6 +251,10 @@ oil market did next.
   reaction isn't missed if the story broke the evening before.
 - **Headlines** are tagged by keyword, so a few may land in the wrong topic. Each past
   spike shows the main market-news headline from that day, when there was one.
+- **Like this before:** each story is turned into a list of word weights (TF-IDF),
+  where rare words such as place and company names count most, and compared with
+  every past oil story. Matches must be at least a week apart and from at least two
+  weeks before the story, so the same event isn't counted twice.
 - **Market news spikes** use the same rules with a lower article minimum, because that
   feed has a few dozen oil stories a day rather than thousands.
 

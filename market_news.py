@@ -142,6 +142,8 @@ def load_archive() -> pd.DataFrame:
         return pd.DataFrame(columns=COLUMNS).assign(time=pd.Series(dtype="datetime64[ns, UTC]"))
     t = pd.concat([pd.read_csv(f, keep_default_na=False) for f in files], ignore_index=True)
     t["time"] = pd.to_datetime(t["time"], utc=True, format="ISO8601")
+    for column in ("headline", "summary"):   # broken apostrophes in the source data
+        t[column] = t[column].str.replace("�", "'", regex=False)
     t["day"] = t["time"].dt.tz_convert(MARKET_TZ).dt.tz_localize(None).dt.normalize()
     t["topics"] = t["topics"].map(lambda s: [k for k in s.split("|") if k in news.TOPICS])
     t["text"] = (t["headline"] + " " + t["summary"]).str.lower()   # for searching
@@ -205,6 +207,40 @@ def add_headlines(spikes: pd.DataFrame, archive: pd.DataFrame,
 
 def topic_match(window: pd.DataFrame, spike) -> pd.Series:
     return window["topics"].map(lambda ts: spike["topic"] in ts)
+
+
+# ---------------------------------------------------------------------------
+# "Like this before": past headlines most similar to a given headline
+# ---------------------------------------------------------------------------
+def build_matcher(archive: pd.DataFrame):
+    """Turn every oil-related story into a word-weight vector (TF-IDF): words
+    that are rare across the archive (e.g. "Abqaiq") count for more than
+    common ones (e.g. "oil"). The headline counts double vs the summary."""
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    pool = oil_related(archive)
+    vectorizer = TfidfVectorizer(stop_words="english", ngram_range=(1, 2), min_df=2,
+                                 max_df=0.3, sublinear_tf=True)
+    matrix = vectorizer.fit_transform(pool["headline"] + " " + pool["headline"] + " "
+                                      + pool["summary"])
+    return pool, vectorizer, matrix
+
+
+def similar(matcher, text: str, before: pd.Timestamp, n: int = 10,
+            min_score: float = 0.15, gap_days: int = 7) -> pd.DataFrame:
+    """The n past stories most similar to `text`, published before `before`,
+    at least gap_days apart (so one story can't fill the list)."""
+    pool, vectorizer, matrix = matcher
+    scores = (matrix @ vectorizer.transform([text + " " + text]).T).toarray().ravel()
+    found = pool.assign(score=scores)
+    found = found[(found["score"] >= min_score) & (found["time"] < before)]
+    picked = []
+    for _, row in found.sort_values("score", ascending=False).iterrows():
+        if all(abs((row["day"] - p["day"]).days) >= gap_days for p in picked):
+            picked.append(row)
+        if len(picked) == n:
+            break
+    columns = ["time", "day", "headline", "source", "url", "topics", "score"]
+    return pd.DataFrame(picked)[columns] if picked else pd.DataFrame(columns=columns)
 
 
 # ---------------------------------------------------------------------------
