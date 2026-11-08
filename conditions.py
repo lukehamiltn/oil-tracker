@@ -104,7 +104,7 @@ def render(features: pd.DataFrame) -> None:
     base_up = (history["next_month_pct"] > 0).mean() * 100
 
     ui.eyebrow("Market conditions")
-    st.subheader("How today's market compares with history")
+    st.subheader("How today's market compares with history", anchor=False)
     st.markdown(f"""
 Where does the oil market stand **today** compared with every trading day since 2007,
 and what did Brent do over the **following month** when conditions were similar?

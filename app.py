@@ -129,7 +129,7 @@ with tab_lab:
 # ---------------------------------------------------------------------------
 with tab_events:
     ui.eyebrow("Scheduled events")
-    st.subheader("How oil reacted to regular, scheduled market news")
+    st.subheader("How oil reacted to regular, scheduled market news", anchor=False)
     kind = st.segmented_control(
         "Event type", ["EIA weekly inventories", "OPEC+ decisions", "Fed rate decisions"],
         default="EIA weekly inventories", key="event_kind") or "EIA weekly inventories"

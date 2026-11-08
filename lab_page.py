@@ -16,7 +16,7 @@ STRATEGY_COLORS = {"buy_and_hold": "#898781", "trend_200d": "#2a78d6",
 
 def render(features, bt_results, bt_metrics, inv_events) -> None:
     ui.eyebrow("Strategy lab")
-    st.subheader("Which simple trading rules actually held up?")
+    st.subheader("Which simple trading rules actually held up?", anchor=False)
     st.markdown(f"""
 Each rule decides at every day's close whether to **own oil or sit in cash**, using
 only information that was public by then, and pays {bt.COST_PCT:.2f}% per trade.

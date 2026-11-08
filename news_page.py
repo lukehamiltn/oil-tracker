@@ -131,7 +131,7 @@ def render(prices: pd.Series, data: dict) -> None:
     # ---- 1. What's in the news now ------------------------------------------
     if not heat.empty:
         ui.eyebrow("In the news now")
-        st.subheader("Which oil stories are making headlines, and what happened last time")
+        st.subheader("Which oil stories are making headlines, and what happened last time", anchor=False)
         st.caption(f"Coverage over the last 3 days compared with normal, from "
                    f"{SOURCE_NAMES[heat_source].split(' (')[0].lower()} (data to "
                    f"{heat['last_day'].max():%b %d, %Y}). For each topic: what Brent did "
@@ -157,7 +157,7 @@ def render(prices: pd.Series, data: dict) -> None:
 
     # ---- 2. Latest headlines ---------------------------------------------------
     ui.eyebrow("Latest headlines")
-    st.subheader("Today's oil news, tagged by topic")
+    st.subheader("Today's oil news, tagged by topic", anchor=False)
     heads, is_live = latest_headlines(archive) if not archive.empty else (pd.DataFrame(), False)
     if not heads.empty:
         if not is_live:
@@ -173,7 +173,7 @@ def render(prices: pd.Series, data: dict) -> None:
     # ---- 3. Explore a topic -----------------------------------------------------
     st.write("")
     ui.eyebrow("Explore a topic")
-    st.subheader("Past news spikes and how oil reacted")
+    st.subheader("Past news spikes and how oil reacted", anchor=False)
     explore_topic(prices, data)
 
     # ---- 4. Compare all topics ------------------------------------------------
@@ -181,7 +181,7 @@ def render(prices: pd.Series, data: dict) -> None:
     if not news_results.empty:
         st.write("")
         ui.eyebrow("All topics")
-        st.subheader("Average Brent move after a news spike, by topic")
+        st.subheader("Average Brent move after a news spike, by topic", anchor=False)
         available = [k for k in TOPIC_KEYS if k in set(news_results["topic"])]
         ui.comparison_section(prices, news_results, news_paths, "topic", available,
                               LABELS, COLORS, key="news_cmp")
@@ -190,7 +190,7 @@ def render(prices: pd.Series, data: dict) -> None:
     # ---- 5. Search the archive ---------------------------------------------------
     st.write("")
     ui.eyebrow("Search the past")
-    st.subheader("Look up any news theme")
+    st.subheader("Look up any news theme", anchor=False)
     search_section(prices, archive)
 
 

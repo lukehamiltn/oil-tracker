@@ -63,7 +63,7 @@ def load_bot_data():
 
 def render() -> None:
     ui.eyebrow("Paper trading bots")
-    st.subheader("Two bots trading fake money at real prices")
+    st.subheader("Two bots trading fake money at real prices", anchor=False)
     st.markdown(f"""
 Two automated bots trade **fake money** in a paper account at **real market
 prices** (via Alpaca). Each starts with **$50,000** and trades **{bot.SYMBOL}**,

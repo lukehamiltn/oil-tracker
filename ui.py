@@ -23,6 +23,8 @@ HORIZON_COLUMNS = {
 
 CSS = """
 <style>
+/* No link icons next to headings (they only scroll the page to the heading) */
+[data-testid="stHeaderActionElements"] { display: none !important; }
 /* Comfortable reading width on big screens */
 .block-container { max-width: 1240px; padding-top: 2.2rem; padding-bottom: 4rem; }
 /* Hero */
