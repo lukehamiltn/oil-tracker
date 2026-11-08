@@ -21,6 +21,7 @@ import fetch_prices
 import inventory_events as inv
 import lab_page
 import market_data as md
+import market_news as mn
 import news
 import news_page
 import strategies as strat
@@ -47,6 +48,11 @@ def get_data():
     prices = es.load_prices()
     inv_events = inv.build_events(inv.load_inventories())
     timelines = news.load_timelines()   # refreshed daily by a GitHub Action
+    archive = mn.load_archive()         # refreshed every 3 hours by a GitHub Action
+    market_timelines = mn.topic_timelines(archive)
+    gdelt_spikes = mn.add_headlines(news.all_spikes(timelines), archive, mn.topic_match)
+    market_spikes = mn.add_headlines(news.all_spikes(market_timelines, "market"),
+                                     archive, mn.topic_match)
     return {
         "prices": prices,
         "opec": es.compute_results(prices, es.load_events()),
@@ -54,7 +60,10 @@ def get_data():
         "inv_events": inv_events,
         "fed": es.compute_results(prices, fed.build_events(fed.load_fed())),
         "timelines": timelines,
-        "news": es.compute_results(prices, news.all_spikes(timelines)),
+        "news": es.compute_results(prices, gdelt_spikes),
+        "archive": archive,
+        "market_timelines": market_timelines,
+        "market_news": es.compute_results(prices, market_spikes),
         "features": (features := strat.build_features(prices)),
         "backtests": bt.run_all(features),
     }
@@ -62,7 +71,6 @@ def get_data():
 
 data = get_data()
 prices = data["prices"]
-news_results, news_paths = data["news"]
 
 # ---------------------------------------------------------------------------
 # Header
@@ -76,7 +84,7 @@ left.markdown(
 about = right.popover("How this works", icon=":material/info:", width="stretch")
 
 st.write("")
-heat = news.current_heat(data["timelines"])
+heat, _ = news_page.current_heat(data)
 latest_date, latest_price = prices.index[-1], prices.iloc[-1]
 n_events = sum(len(data[k][0]) for k in ("opec", "inventory", "fed", "news"))
 k1, k2, k3, k4 = st.columns(4)
@@ -205,13 +213,13 @@ results largely reflect the economy that prompted the decision.
 # hold up the other tabs.
 # ---------------------------------------------------------------------------
 with tab_news:
-    news_page.render(prices, data["timelines"], news_results, news_paths)
+    news_page.render(prices, data)
 
 # ---------------------------------------------------------------------------
 # Footer
 # ---------------------------------------------------------------------------
 st.markdown(
-    '<div class="footer">Data: GDELT Project (news), U.S. EIA, FRED / Federal Reserve, '
+    '<div class="footer">Data: GDELT Project (worldwide news), Benzinga via Alpaca (market news), U.S. EIA, FRED / Federal Reserve, '
     'CFTC, Alpaca (live prices). A research tool, not investment advice.</div>',
     unsafe_allow_html=True)
 
@@ -225,8 +233,11 @@ Find today's oil news, match it to similar moments in the past, and show what th
 oil market did next.
 
 ### News
-- **Source:** the GDELT Project, which monitors news worldwide. Searchable history
-  starts in 2017.
+- **Two sources.** *Worldwide news* from the GDELT Project, which monitors news
+  everywhere (history since 2017), and *market news* from Benzinga via Alpaca:
+  financial news about oil funds and oil companies (history since 2015). The latest
+  headlines and the search box use the market news archive, which is saved with the
+  site, so searches are instant.
 - **Topics:** each topic (e.g. attacks on tankers) is a fixed news search. For every
   day we measure the topic's share of *all* news, so growth in GDELT's coverage
   doesn't distort comparisons.
@@ -238,7 +249,10 @@ oil market did next.
   unusually few articles are skipped.
 - **Timing:** we start from the close one business day *before* the spike, so the
   reaction isn't missed if the story broke the evening before.
-- **Headlines** are tagged by keyword, so a few may land in the wrong topic.
+- **Headlines** are tagged by keyword, so a few may land in the wrong topic. Each past
+  spike shows the main market-news headline from that day, when there was one.
+- **Market news spikes** use the same rules with a lower article minimum, because that
+  feed has a few dozen oil stories a day rather than thousands.
 
 ### Other data
 - **Prices:** daily Brent crude spot prices from the U.S. EIA, via FRED.

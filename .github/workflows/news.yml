@@ -1,19 +1,18 @@
 # Keeps the website's news data fresh, saved in the repository so the site
 # loads it instantly and never has to wait on the news feed:
-#   - every 3 hours: save the latest headlines (news_data/headlines.csv),
-#     which the site shows whenever the live feed is busy
-#   - once a day (and on manual runs): update each topic's coverage history
-#     (news_data/timelines.csv); only recent days are re-downloaded, and any
-#     topic still missing is downloaded in full
-# GDELT rate-limits heavily, so each step is allowed to fail without stopping
-# the other; whatever was fetched is still saved.
+#   - every 3 hours: refresh the market news archive (news_data/market_news/,
+#     from Alpaca), which powers the headlines and the search box
+#   - once a day (and on manual runs): update each topic's worldwide coverage
+#     history from GDELT (news_data/timelines.csv)
+# Each step is allowed to fail without stopping the other (GDELT rate-limits
+# heavily); whatever was fetched is still saved.
 
 name: Refresh news data
 
 on:
   schedule:
-    - cron: "15 6 * * *"     # daily: coverage history + headlines
-    - cron: "45 */3 * * *"   # every 3 hours: headlines only
+    - cron: "15 6 * * *"     # daily: GDELT history + market news
+    - cron: "45 */3 * * *"   # every 3 hours: market news only
   workflow_dispatch:         # adds a "Run workflow" button (runs both steps)
 
 permissions:
@@ -32,9 +31,12 @@ jobs:
         if: github.event_name == 'workflow_dispatch' || github.event.schedule == '15 6 * * *'
         continue-on-error: true
         run: python -u news.py update
-      - name: Save latest headlines
+      - name: Refresh market news
         continue-on-error: true
-        run: python -u news.py save-headlines
+        env:
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+        run: python -u market_news.py update
       - name: Save the updated files
         if: always()
         run: |

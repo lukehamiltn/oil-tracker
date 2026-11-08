@@ -14,9 +14,12 @@ today's market conditions vs history, and two paper-trading bots on live prices.
 
 All free; government data unless noted.
 
-- **News:** the GDELT Project: daily coverage of 8 oil news topics since 2017
-  (saved in `news_data/timelines.csv`, refreshed daily by
-  `.github/workflows/news.yml`) and live headlines
+- **Worldwide news:** the GDELT Project: daily coverage of 8 oil news topics
+  since 2017 (saved in `news_data/timelines.csv`, refreshed daily by
+  `.github/workflows/news.yml`)
+- **Market news:** Benzinga via Alpaca: every story about oil funds and oil
+  companies since 2015 (saved in `news_data/market_news/`, one file per month,
+  refreshed every 3 hours). Powers the live headlines and the instant search
 - **Prices:** Brent and WTI daily spot prices (EIA, via FRED)
 - **Inventories:** EIA weekly U.S. crude stocks (public spreadsheet, no API key)
 - **OPEC+ decisions:** hand-verified list in `events/opec_decisions.csv`
@@ -41,7 +44,8 @@ python -m venv .venv
 .venv\Scripts\python.exe market_data.py         # CFTC positioning + dollar index
 .venv\Scripts\python.exe fed_events.py          # Fed rate changes
 .venv\Scripts\python.exe news.py update         # news coverage history (slow: GDELT rate limits)
-.venv\Scripts\python.exe news.py headlines      # latest tagged oil headlines
+.venv\Scripts\python.exe market_news.py update  # market news archive (fast)
+.venv\Scripts\python.exe market_news.py latest  # latest tagged oil headlines
 
 # analysis
 .venv\Scripts\python.exe event_study.py         # OPEC+ event study
@@ -62,7 +66,7 @@ are in `ui.py`; the site theme is in `.streamlit/config.toml`.
 
 | Tab | File | What it shows |
 |---|---|---|
-| News → past | `news_page.py`, `news.py` | Today's headlines by topic, past news spikes, Brent's reaction, custom search |
+| News → past | `news_page.py`, `news.py`, `market_news.py` | Today's headlines by topic, past news spikes, Brent's reaction, custom search |
 | Paper trading bots | `bot_dashboard.py` | Both bots' value, positions, trades vs holding BNO |
 | Market conditions | `conditions.py` | Today's indicators vs history, and the most similar past days |
 | Strategy lab | `lab_page.py`, `backtest.py`, `strategies.py` | Backtests, 2007-2016 build vs 2017-now test |
@@ -86,6 +90,6 @@ Keys are never committed. They live in:
 2. [x] Backtester with out-of-sample test
 3. [x] Paper-trading bots on live prices
 4. [x] Market conditions page
-5. [x] News: GDELT topics, spikes, headlines, custom search
+5. [x] News: GDELT topics + Alpaca market news archive, spikes, headlines, instant search
 6. [x] Site redesign (clean research style)
 7. [ ] Custom domain / paid hosting

@@ -3,10 +3,12 @@ News: match today's oil news to similar moments in the past, and show what
 the oil market did next.
 
 Source: the GDELT Project (gdeltproject.org), a free database that monitors
-news worldwide. Two things come from it:
-  1. HISTORY - for each news TOPIC (e.g. "attacks on tankers"), how much of
-     the world's news coverage it got every day since 2017.
-  2. TODAY - the latest oil-related headlines, each tagged with its topic.
+news worldwide. For each news TOPIC (e.g. "attacks on tankers") we save how
+much of the world's news coverage it got every day since 2017.
+
+The latest headlines, the search box and a second, market-news view of each
+topic come from market_news.py (Alpaca/Benzinga), because GDELT's rate
+limits make live requests from the website unreliable.
 
 A "news spike" is a day when a topic suddenly got far more coverage than
 usual (at least 3x its normal share of all news). Each spike is treated as
@@ -18,9 +20,7 @@ The history is refreshed once a day by a GitHub Action
 the website loads it instantly instead of querying GDELT on every visit.
 
 Run it with:
-    python news.py update           refresh the topic + saved-theme history (slow: GDELT rate limits)
-    python news.py save-headlines   save the latest headlines (website backup)
-    python news.py headlines        show the latest tagged headlines
+    python news.py update           refresh the topic history (slow: GDELT rate limits)
 """
 
 import re
@@ -94,26 +94,7 @@ TOPICS = {
         "color": "#e34948",
     },
 }
-HEADLINE_QUERY = "(oil OR crude OR OPEC OR Brent) sourcelang:english"
 
-# Popular search themes, downloaded ahead of time by the daily GitHub job
-# (news_data/themes.csv) so the website's search shows them instantly
-# without asking GDELT live. key: (label, GDELT query)
-THEMES = {
-    "hormuz": ("Strait of Hormuz", '"Strait of Hormuz"'),
-    "red_sea": ("Red Sea shipping", '"Red Sea" (shipping OR tanker OR Houthi)'),
-    "refinery_fire": ("Refinery fires & explosions", "refinery (fire OR explosion OR blaze)"),
-    "pipeline": ("Pipeline attacks & leaks", "pipeline (explosion OR leak OR sabotage OR shutdown) oil"),
-    "russia_oil": ("Russian oil exports", "Russia (oil OR crude) (exports OR ban OR \"price cap\")"),
-    "iran_nuclear": ("Iran nuclear talks", "Iran nuclear (deal OR talks OR agreement)"),
-    "venezuela": ("Venezuela oil", "Venezuela (oil OR crude OR PDVSA)"),
-    "libya": ("Libya oil shutdowns", "Libya oil (blockade OR shutdown OR field OR port)"),
-    "china_demand": ("China oil imports", "China (oil OR crude) (imports OR demand)"),
-    "price_war": ("Oil price war", '"price war" (oil OR crude OR Saudi)'),
-    "shale": ("U.S. shale output", "shale (production OR output OR drilling OR rigs)"),
-    "lockdown": ("Lockdowns & travel demand", "(lockdown OR lockdowns OR pandemic) (oil OR fuel OR travel)"),
-}
-THEMES_PATH = TIMELINES_PATH.parent / "themes.csv"
 
 
 # ---------------------------------------------------------------------------
@@ -212,43 +193,50 @@ def load_timelines(path: Path = TIMELINES_PATH) -> pd.DataFrame:
     return pd.read_csv(path, parse_dates=["date"])
 
 
-def update_all() -> None:
-    """Topics first (they drive the main page), then the search themes."""
-    if update():
-        update(THEMES, THEMES_PATH)
+# Spike settings per news source. GDELT counts thousands of articles a day;
+# the market news archive (market_news.py) only a few dozen, so it needs a
+# lower article minimum and an average (not median) baseline - a median of
+# mostly-zero days would be zero.
+SOURCES = {
+    "gdelt": {"min_articles": MIN_ARTICLES, "baseline": "median", "skip_outages": True},
+    "market": {"min_articles": 4, "baseline": "mean", "skip_outages": False},
+}
 
 
-def load_themes() -> pd.DataFrame:
-    return load_timelines(THEMES_PATH)
-
-
-def coverage(t: pd.DataFrame) -> pd.DataFrame:
+def coverage(t: pd.DataFrame, source: str = "gdelt") -> pd.DataFrame:
     """Add each day's share of all news, the 'normal' share and the ratio."""
+    settings = SOURCES[source]
     t = t.sort_values("date").copy()
-    # Drop today's partial day: GDELT is still collecting it
+    # Drop today's partial day: it's still being collected
     t = t[t["date"] < pd.Timestamp.now(tz="UTC").tz_localize(None).normalize()]
-    # Skip days when GDELT itself collected far fewer articles than usual (an
-    # outage): a topic's share of a tiny total looks like a fake spike.
-    typical_total = t["all_articles"].shift(1).rolling(30, min_periods=10).median()
-    collected_ok = (t["all_articles"] > 0) & ~(t["all_articles"] < 0.5 * typical_total)
+    collected_ok = t["all_articles"] > 0
+    if settings["skip_outages"]:
+        # Skip days when GDELT itself collected far fewer articles than usual
+        # (an outage): a topic's share of a tiny total looks like a fake spike.
+        typical_total = t["all_articles"].shift(1).rolling(30, min_periods=10).median()
+        collected_ok &= ~(t["all_articles"] < 0.5 * typical_total)
     t["share_per_million"] = (t["articles"] / t["all_articles"] * 1e6).where(collected_ok)
-    t["normal"] = t["share_per_million"].shift(1).rolling(BASELINE_DAYS, min_periods=30).median()
+    past = t["share_per_million"].shift(1).rolling(BASELINE_DAYS, min_periods=30)
+    t["normal"] = past.median() if settings["baseline"] == "median" else past.mean()
     t["ratio"] = t["share_per_million"] / t["normal"].where(t["normal"] > 0)
     return t
 
 
-def find_spikes(t: pd.DataFrame, category: str = "topic") -> pd.DataFrame:
+def find_spikes(t: pd.DataFrame, category: str = "topic", source: str = "gdelt",
+                min_articles: int | None = None) -> pd.DataFrame:
     """One event per news spike, in the same shape as the other event studies.
 
     The event date is set ONE business day before the spike day, so the
     starting price is from before the story broke even if it broke the
     previous evening (news is dated in UTC; markets are not)."""
-    c = coverage(t)
+    if min_articles is None:
+        min_articles = SOURCES[source]["min_articles"]
+    c = coverage(t, source)
     # A spike must also be a busy day by the topic's own standards: in the top
     # 10% of its daily article counts over the previous 12 months. This stops
     # usually-quiet topics "spiking" on a handful of articles.
     busy_day = c["articles"].shift(1).rolling(365, min_periods=90).quantile(0.90)
-    hot = c[(c["ratio"] >= SPIKE_RATIO) & (c["articles"] >= MIN_ARTICLES)
+    hot = c[(c["ratio"] >= SPIKE_RATIO) & (c["articles"] >= min_articles)
             & ~(c["articles"] < busy_day)]
     topic = t["topic"].iloc[0] if "topic" in t and len(t) else None
     months = TOPICS.get(topic, {}).get("months")
@@ -271,18 +259,20 @@ def find_spikes(t: pd.DataFrame, category: str = "topic") -> pd.DataFrame:
                                        "articles", "description"])
 
 
-def all_spikes(timelines: pd.DataFrame) -> pd.DataFrame:
-    parts = [find_spikes(group) for _, group in timelines.groupby("topic")]
+def all_spikes(timelines: pd.DataFrame, source: str = "gdelt") -> pd.DataFrame:
+    parts = [find_spikes(group, source=source) for _, group in timelines.groupby("topic")]
     if not parts:
         return find_spikes(timelines.assign(topic="none")).iloc[0:0]
     return pd.concat(parts, ignore_index=True).sort_values("date").reset_index(drop=True)
 
 
-def current_heat(timelines: pd.DataFrame) -> pd.DataFrame:
+def current_heat(timelines: pd.DataFrame, source: str = "gdelt") -> pd.DataFrame:
     """For each topic: coverage over the last 3 days vs normal."""
     rows = []
     for key, group in timelines.groupby("topic"):
-        c = coverage(group)
+        c = coverage(group, source)
+        if c.empty:
+            continue
         recent = c.tail(3)
         normal = c["normal"].iloc[-1]
         ratio = recent["share_per_million"].mean() / normal if normal else float("nan")
@@ -294,62 +284,17 @@ def current_heat(timelines: pd.DataFrame) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
-# Today's headlines
+# Headline tagging (used for the market news archive)
 # ---------------------------------------------------------------------------
 def classify(title: str) -> list[str]:
     title = title.lower()
     return [key for key, t in TOPICS.items() if re.search(t["keywords"], title)]
 
 
-HEADLINES_PATH = TIMELINES_PATH.parent / "headlines.csv"
-HEADLINE_COLUMNS = ["time", "title", "source", "url", "topics"]
-
-
-def headlines(hours: int = 24, limit: int = 75, quick: bool = False) -> pd.DataFrame:
-    """Latest oil headlines. quick=True makes ONE short attempt (for the
-    website); otherwise it waits out GDELT's rate limits (for background jobs)."""
-    params = {"query": HEADLINE_QUERY, "mode": "artlist", "maxrecords": limit,
-              "timespan": f"{hours}h", "sort": "datedesc"}
-    data = (gdelt(params, tries=1, spacing=0, timeout=10) if quick
-            else gdelt(params))
-    articles = pd.DataFrame(data.get("articles", []))
-    if articles.empty:
-        return pd.DataFrame(columns=HEADLINE_COLUMNS)
-    articles = articles.drop_duplicates("title")
-    articles["time"] = pd.to_datetime(articles["seendate"], format="%Y%m%dT%H%M%SZ", utc=True)
-    articles["topics"] = articles["title"].apply(classify)
-    return articles.rename(columns={"domain": "source"})[HEADLINE_COLUMNS]
-
-
-def save_headlines() -> None:
-    """Save the latest headlines as a backup the website can always show."""
-    heads = headlines(hours=48)
-    if heads.empty:
-        print("No headlines returned - keeping the saved ones.")
-        return
-    HEADLINES_PATH.parent.mkdir(exist_ok=True)
-    heads.assign(topics=heads["topics"].str.join("|")).to_csv(HEADLINES_PATH, index=False)
-    print(f"Saved {len(heads)} headlines to {HEADLINES_PATH}")
-
-
-def load_saved_headlines() -> pd.DataFrame:
-    if not HEADLINES_PATH.exists():
-        return pd.DataFrame(columns=HEADLINE_COLUMNS)
-    saved = pd.read_csv(HEADLINES_PATH, keep_default_na=False)
-    saved["time"] = pd.to_datetime(saved["time"], utc=True, format="ISO8601")
-    saved["topics"] = saved["topics"].apply(lambda s: [t for t in s.split("|") if t in TOPICS])
-    return saved[HEADLINE_COLUMNS]
-
-
 def main() -> None:
     command = sys.argv[1] if len(sys.argv) > 1 else "update"
     if command == "update":
-        update_all()
-    elif command == "save-headlines":
-        save_headlines()
-    elif command == "headlines":
-        for _, h in headlines().iterrows():
-            print(f"{h['time']:%H:%M} {h['source']:25} {', '.join(h['topics']) or '-':20} {h['title'][:90]}")
+        update()
 
 
 if __name__ == "__main__":
