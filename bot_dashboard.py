@@ -10,6 +10,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 import bot
+import ui
 
 BOT_COLORS = {"weak_dollar": "#2a78d6", "trend_200d": "#eb6834"}
 
@@ -61,6 +62,8 @@ def load_bot_data():
 
 
 def render() -> None:
+    ui.eyebrow("Paper trading bots")
+    st.subheader("Two bots trading fake money at real prices")
     st.markdown(f"""
 Two automated bots trade **fake money** in a paper account at **real market
 prices** (via Alpaca). Each starts with **$50,000** and trades **{bot.SYMBOL}**,
@@ -90,11 +93,11 @@ before the 4pm ET close and only trade when their decision changes.
         value = b["cash"] + b["shares"] * price
         own, reason = data["signals"][name]
         col.metric(info["label"], f"${value:,.2f}",
-                   f"{(value / info['budget'] - 1) * 100:+.2f}% since start")
+                   f"{(value / info['budget'] - 1) * 100:+.2f}% since start", border=True)
         col.caption(f"**Holding:** {f'{b['shares']:,.2f} {bot.SYMBOL}' if b['shares'] > 0 else 'cash'}  \n"
                     f"**Today's signal:** {'own ' + bot.SYMBOL if own else 'cash'}  \n{reason}")
     cols[-1].metric(f"Just holding {bot.SYMBOL}", f"{hold_return:+.2f}%",
-                    f"since {data['started']:%b %d, %Y}", delta_color="off")
+                    f"since {data['started']:%b %d, %Y}", delta_color="off", border=True)
 
     if len(closes) > 1:
         fig = go.Figure()
@@ -117,7 +120,7 @@ before the 4pm ET close and only trade when their decision changes.
         st.caption(f"The bots started on {data['started']:%b %d, %Y}. "
                    "The performance chart appears after a couple of trading days.")
 
-    st.subheader("Trades")
+    st.markdown("**Trades**")
     trades = data["fills"]
     if trades.empty:
         st.caption("No trades yet. Each bot trades at its first check before the "

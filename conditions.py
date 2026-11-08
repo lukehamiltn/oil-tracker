@@ -18,6 +18,8 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+import ui
+
 START = "2007-01-01"
 HORIZON = 20                 # trading days ahead (~1 month)
 N_ANALOGS = 15
@@ -101,6 +103,8 @@ def render(features: pd.DataFrame) -> None:
     base_avg = history["next_month_pct"].mean()
     base_up = (history["next_month_pct"] > 0).mean() * 100
 
+    ui.eyebrow("Market conditions")
+    st.subheader("How today's market compares with history")
     st.markdown(f"""
 Where does the oil market stand **today** compared with every trading day since 2007,
 and what did Brent do over the **following month** when conditions were similar?
@@ -109,14 +113,14 @@ For reference, across all days Brent's average move over the next month was
 """)
 
     # --- 1. Indicator by indicator ------------------------------------------
-    st.subheader(f"Today's readings (as of {as_of:%b %d, %Y})")
+    st.markdown(f"**Today's readings** (as of {as_of:%b %d, %Y})")
     summary = indicator_summary(table)
     cols = st.columns(3)
     for i, row in summary.iterrows():
         label, fmt, help_text = INDICATORS[row["key"]]
         cols[i % 3].metric(label, fmt % row["today"],
                            f"{row['bucket']} · higher than {row['percentile']:.0f}% of days",
-                           delta_color="off", help=help_text)
+                           delta_color="off", help=help_text, border=True)
 
     st.markdown("**What Brent did over the next month, when each indicator was in today's bucket**")
     st.dataframe(
@@ -133,17 +137,17 @@ For reference, across all days Brent's average move over the next month was
                "so 'past days' overstates how much independent evidence there is.")
 
     # --- 2. Closest past situations -------------------------------------------
-    st.subheader("Past situations most like today")
+    st.write(""); st.markdown("**Past situations most like today**")
     analogs = find_analogs(table)
     a_avg = analogs["next_month_pct"].mean()
     a_up = (analogs["next_month_pct"] > 0).mean() * 100
     c1, c2, c3 = st.columns(3)
     c1.metric("Closest matches used", f"{len(analogs)}",
-              f"at least {MIN_GAP} trading days apart", delta_color="off")
+              f"at least {MIN_GAP} trading days apart", delta_color="off", border=True)
     c2.metric("Brent over their next month: average", f"{a_avg:+.1f}%",
-              f"median {analogs['next_month_pct'].median():+.1f}%", delta_color="off")
+              f"median {analogs['next_month_pct'].median():+.1f}%", delta_color="off", border=True)
     c3.metric("Brent rose afterwards", f"{a_up:.0f}% of the time",
-              f"all days: {base_up:.0f}%", delta_color="off")
+              f"all days: {base_up:.0f}%", delta_color="off", border=True)
 
     # Price path after each analog
     price = features["price"]

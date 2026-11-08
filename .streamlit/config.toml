@@ -1,0 +1,21 @@
+# Site-wide look ("clean research" style).
+# Colours come from the same palette the charts use.
+
+[theme]
+base = "light"
+primaryColor = "#2a78d6"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f4f4f1"
+textColor = "#1d1d1b"
+linkColor = "#256abf"
+borderColor = "#e1e0d9"
+baseRadius = "medium"
+font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap, sans-serif"
+headingFont = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap, sans-serif"
+headingFontWeights = [700, 600, 600, 600, 600, 600]
+metricValueFontSize = "1.7rem"
+metricValueFontWeight = 600
+chartCategoricalColors = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"]
+
+[client]
+toolbarMode = "minimal"

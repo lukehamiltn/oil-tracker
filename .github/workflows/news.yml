@@ -1,0 +1,30 @@
+# Refreshes the news coverage history (news_data/timelines.csv) once a day
+# and saves it to the repository, so the website can load it instantly.
+# Only the last few weeks are re-downloaded each day (see news.update()).
+
+name: Refresh news history
+
+on:
+  schedule:
+    - cron: "15 6 * * *"   # 06:15 UTC daily
+  workflow_dispatch:       # adds a "Run workflow" button for manual runs
+
+permissions:
+  contents: write          # needed to save the updated file
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install pandas==3.1.1 requests==2.34.2
+      - run: python news.py update
+      - name: Save the updated history
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add news_data/timelines.csv
+          git diff --cached --quiet || (git commit -m "Refresh news history" && git push)
