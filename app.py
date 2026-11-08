@@ -114,6 +114,7 @@ def get_data():
         "prices": prices,
         "markets": markets,
         "typical": mk.typical_moves(markets),
+        "sig": mk.Significance(markets),      # "is this real?" checks
         "react": react,
         # Brent results, used throughout the site
         **{name: react[name]["BRENT"] for name in react},
@@ -253,17 +254,19 @@ results largely reflect the economy that prompted the decision.
         similar = results[results["category"] == latest["category"]]
         c1, c2, c3 = st.columns(3)
         c1.metric("Similar past reports", f"{len(similar)}", border=True)
+        verdict = mk.VERDICTS[data["sig"].check(market, 1, similar["day_1_pct"])][0]
         c2.metric(f"{name} on report day: average", f"{similar['day_1_pct'].mean():+.2f}%",
-                  border=True)
+                  verdict, delta_color="off", delta_arrow="off", border=True)
         c3.metric(f"{name} rose on report day",
                   f"{(similar['day_1_pct'] > 0).mean():.0%} of the time", border=True)
 
     st.markdown(f"**Average reaction in {mk.MARKETS[market][0]}, by {k['heading']}**")
     ui.comparison_section(data["markets"][market], results, paths, k["cat_col"],
-                          k["categories"], k["labels"], k["colors"], key=k["set"], market=name)
+                          k["categories"], k["labels"], k["colors"], key=k["set"], market=name,
+                          sig=data["sig"], market_key=market)
     st.markdown("**The same events in every market**")
     ui.cross_market_section(data["react"][k["set"]], data["typical"], k["cat_col"],
-                            k["categories"], k["labels"], key=k["set"])
+                            k["categories"], k["labels"], key=k["set"], sig=data["sig"])
     st.markdown(f"**{k['explore']}** (in {mk.MARKETS[market][0]})")
     ui.drilldown_section(results, paths, k["cat_col"], k["categories"], k["labels"],
                          k["colors"], key=k["set"], select_label=k["select_label"],
@@ -350,6 +353,19 @@ oil market did next.
   "most similar days" compares all six indicators at once.
 - **Backtests** only use data that was public at the time, charge {bt.COST_PCT:.2f}% per
   trade, and were designed on 2007–2016 and tested on 2017–now.
+
+### Is this pattern real?
+Every average is checked against luck. If an event type has 20 past cases, we pick
+20 *random* days from the same market's history, thousands of times over, and see how
+often their average move is as far from normal as the events' average was.
+- **Strong pattern (●●):** random days do that less than 2% of the time.
+- **Possible pattern (●):** less than 10% of the time.
+- **Could be noise:** random days do it often, so the average may just be luck.
+- **Too few events:** fewer than {mk.MIN_EVENTS} cases; we don't judge.
+
+The site checks hundreds of averages, so a few "strong" labels will still be flukes
+(about 1 in 50 of the checks that are really noise). Treat a pattern as more
+convincing when it shows up across related markets (e.g. crude *and* gasoline).
 
 ### Limits - please read
 - **Markets react to surprises.** Expected news may barely move prices.

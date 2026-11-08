@@ -146,7 +146,7 @@ def average_path(paths: dict, dates) -> pd.Series:
 # ---------------------------------------------------------------------------
 @st.fragment
 def comparison_section(prices, results, paths, cat_col, categories, labels, colors, key,
-                       market: str = "Brent"):
+                       market: str = "Brent", sig=None, market_key: str = "BRENT"):
     """Average price path for every category, plus a summary table.
     (A fragment: changing its options only redraws this section.)"""
     if results.empty:
@@ -172,8 +172,14 @@ def comparison_section(prices, results, paths, cat_col, categories, labels, colo
                .agg(events="count", average="mean", median="median",
                     pct_up=lambda s: (s > 0).mean() * 100, best="max", worst="min")
                .reindex(categories).dropna(how="all"))
+    if sig is not None:
+        verdicts = {c: sig.check(market_key, horizon, g) for c, g in results.groupby(cat_col)[col]}
+        summary["pattern"] = [mk.VERDICTS[verdicts.get(c, "few")][0] for c in summary.index]
     summary.index = [labels[c] for c in summary.index]
     st.dataframe(summary, width="stretch", key=f"{key}_summary", column_config={
+        "pattern": st.column_config.TextColumn(
+            "Pattern?", help="Could random days have produced an average this big? "
+                             "See 'How this works'."),
         "events": st.column_config.NumberColumn("Events"),
         "average": st.column_config.NumberColumn("Average", format=PCT),
         "median": st.column_config.NumberColumn("Median", format=PCT),
@@ -183,7 +189,8 @@ def comparison_section(prices, results, paths, cat_col, categories, labels, colo
     })
     st.caption(f"For comparison: at any ordinary time, {market}'s typical move over "
                f"{HORIZON_NAMES[horizon]} is about ±{es.typical_move(prices, horizon):.1f}%. "
-               "Results smaller than that may just be normal noise.")
+               "**Pattern?** says how unlikely the average would be on random days: "
+               "a strong pattern happens by chance less than 2% of the time.")
 
 
 @st.fragment
@@ -251,60 +258,72 @@ def market_picker(key: str, available, label: str = "Measure the reaction in") -
                                 format_func=lambda k: mk.MARKETS[k][1]) or "BRENT"
 
 
-def _shade(value: float, typical: float) -> str:
+MARKS = {"strong": " ●●", "possible": " ●", "noise": "", "few": ""}
+LEGEND = ("●● strong pattern (random days do this less than 2% of the time) · "
+          "● possible pattern (less than 10%) · grey = could be noise, or too few events")
+
+
+def _shade(value: float, typical: float, verdict: str = "strong") -> str:
     """Green for a rise, red for a fall; stronger when the move is large
-    compared with that market's ordinary moves."""
+    compared with that market's ordinary moves. Moves that could be noise
+    are greyed out instead of coloured."""
     if pd.isna(value) or not typical:
         return ""
+    if verdict in ("noise", "few"):
+        return "color: #a3a29c"
     strength = min(abs(value) / typical, 2) / 2          # 0 .. 1
     r, g, b = UP if value > 0 else DOWN
-    return f"background-color: rgba({r},{g},{b},{0.08 + 0.5 * strength:.2f})"
+    weight = "font-weight: 600; " if verdict == "strong" else ""
+    return f"{weight}background-color: rgba({r},{g},{b},{0.12 + 0.5 * strength:.2f})"
+
+
+def _cell(value: float, verdict: str) -> str:
+    return "" if pd.isna(value) else f"{value:+.1f}%{MARKS.get(verdict, '')}"
 
 
 @st.fragment
-def cross_market_section(by_market: dict, typical: dict, cat_col, categories, labels, key):
+def cross_market_section(by_market: dict, typical: dict, cat_col, categories, labels, key,
+                         sig=None):
     """Average move after each kind of event, in every market side by side."""
     horizon = st.segmented_control("Measured over", es.HORIZONS, default=5, key=f"{key}_xh",
                                    format_func=lambda h: HORIZON_NAMES[h].split(" (")[0]) or 5
-    table = mk.by_category(by_market, cat_col, categories, labels, horizon)
-    table.loc["Typical move at any time (±)"] = [typical[horizon][k] for k in table.columns]
-    shades = pd.DataFrame("", index=table.index, columns=table.columns)
-    for k in table.columns:
-        shades[k] = [_shade(v, typical[horizon][k]) for v in table[k]]
-    shades.iloc[-1] = "color: #898781; font-style: italic"
-    styled = (table.style.format(lambda v: "" if pd.isna(v) else f"{v:+.1f}%")
-              .apply(lambda _: shades, axis=None))
-    styled = styled.format(lambda v: f"±{v:.1f}%", subset=pd.IndexSlice[table.index[-1], :])
-    st.dataframe(styled, width="stretch", key=f"{key}_xtable", column_config={
-        k: st.column_config.Column(mk.MARKETS[k][1]) for k in table.columns})
-    notes = " ".join(mk.NOTES[k] for k in table.columns if k in mk.NOTES)
+    means, verdicts = mk.by_category(by_market, cat_col, categories, labels, horizon, sig)
+    text = pd.DataFrame({k: [_cell(v, d) for v, d in zip(means[k], verdicts[k])]
+                         for k in means.columns}, index=means.index)
+    shades = pd.DataFrame({k: [_shade(v, typical[horizon][k], d)
+                               for v, d in zip(means[k], verdicts[k])]
+                           for k in means.columns}, index=means.index)
+    typical_row = "Typical move at any time (±)"
+    text.loc[typical_row] = [f"±{typical[horizon][k]:.1f}%" for k in means.columns]
+    shades.loc[typical_row] = "color: #898781; font-style: italic"
+    st.dataframe(text.style.apply(lambda _: shades, axis=None), width="stretch",
+                 key=f"{key}_xtable",
+                 column_config={k: st.column_config.Column(mk.MARKETS[k][1])
+                                for k in means.columns})
+    notes = " ".join(mk.NOTES[k] for k in means.columns if k in mk.NOTES)
     st.caption("Average move from the close before each event. Green = rose, red = fell; "
                "the stronger the colour, the bigger the move compared with that market's "
-               f"typical move (bottom row). {notes}")
+               f"typical move (bottom row). {LEGEND}. {notes}")
 
 
-def market_reaction_table(by_market: dict, typical: dict, keep=None, key: str = "") -> None:
+def market_reaction_table(by_market: dict, typical: dict, keep=None, key: str = "",
+                          sig=None) -> None:
     """Compact table: how every market moved after one set of events."""
-    table = mk.for_events(by_market, keep)
+    table = mk.for_events(by_market, keep, sig)
     if table.empty:
         return
-    table["typical_5"] = [typical[5][k] for k in table["key"]]
-    shown = table.set_index("market")[["events", "day_1_pct", "day_5_pct", "day_20_pct",
-                                       "pct_up_5", "typical_5"]]
-    shades = pd.DataFrame("", index=shown.index, columns=shown.columns)
-    for h in es.HORIZONS:
-        shades[f"day_{h}_pct"] = [_shade(v, typical[h][k]) for v, k in
-                                  zip(shown[f"day_{h}_pct"], table["key"])]
-    styled = shown.style.format({"events": "{:d}", "day_1_pct": "{:+.1f}%",
-                                 "day_5_pct": "{:+.1f}%", "day_20_pct": "{:+.1f}%",
-                                 "pct_up_5": "{:.0f}%", "typical_5": "±{:.1f}%"}
-                                ).apply(lambda _: shades, axis=None)
-    st.dataframe(styled, width="stretch", key=f"{key}_mtable", column_config={
-        "market": st.column_config.Column("Market"),
-        "events": st.column_config.Column("Events"),
-        "day_1_pct": st.column_config.Column("1 day"),
-        "day_5_pct": st.column_config.Column("1 week"),
-        "day_20_pct": st.column_config.Column("1 month"),
-        "pct_up_5": st.column_config.Column("Rose after a week"),
-        "typical_5": st.column_config.Column("Typical week (any time)"),
-    })
+    shown = pd.DataFrame(index=table["market"])
+    shown["Events"] = table["events"].astype(str).values
+    shades = pd.DataFrame("", index=shown.index, columns=["Events"])
+    for h, name in zip(es.HORIZONS, ["1 day", "1 week", "1 month"]):
+        verdict = table[f"verdict_{h}"] if sig is not None else ["strong"] * len(table)
+        shown[name] = [_cell(v, d) for v, d in zip(table[f"day_{h}_pct"], verdict)]
+        shades[name] = [_shade(v, typical[h][k], d) for v, k, d in
+                        zip(table[f"day_{h}_pct"], table["key"], verdict)]
+    shown["Rose after a week"] = [f"{v:.0f}%" for v in table["pct_up_5"]]
+    shown["Typical week (any time)"] = [f"±{typical[5][k]:.1f}%" for k in table["key"]]
+    shades = shades.reindex(columns=shown.columns, fill_value="")
+    st.dataframe(shown.style.apply(lambda _: shades, axis=None), width="stretch",
+                 key=f"{key}_mtable", column_config={"market": st.column_config.Column("Market")})
+    if sig is not None:
+        st.caption(LEGEND + ".")

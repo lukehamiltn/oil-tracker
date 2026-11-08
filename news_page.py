@@ -151,6 +151,8 @@ def render(prices: pd.Series, data: dict) -> None:
                     st.caption(f"After {len(past)} past spikes, Brent averaged "
                                f"**{week.mean():+.1f}%** over the next week and rose "
                                f"{(week > 0).mean():.0%} of the time.")
+                    text, tone = mk.VERDICTS[data["sig"].check("BRENT", 5, week)]
+                    st.markdown(ui.chip(text, tone), unsafe_allow_html=True)
                 else:
                     st.caption("No past spikes to compare with yet.")
         st.write("")
@@ -281,14 +283,18 @@ def like_this_before(data, archive, heads) -> None:
     day, week, month = results["day_1_pct"], results["day_5_pct"], results["day_20_pct"]
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Similar past stories", len(results), border=True)
-    m2.metric("Brent next day: average", f"{day.mean():+.1f}%", border=True)
+    verdict = lambda h, v: mk.VERDICTS[data["sig"].check("BRENT", h, v)][0]
+    m2.metric("Brent next day: average", f"{day.mean():+.1f}%", verdict(1, day),
+              delta_color="off", delta_arrow="off", border=True)
     m3.metric("Brent a week later: average", f"{week.mean():+.1f}%",
-              f"rose {(week > 0).mean():.0%} of the time", delta_color="off", border=True)
+              f"{verdict(5, week)} · rose {(week > 0).mean():.0%}", delta_color="off",
+              delta_arrow="off", border=True)
     m4.metric("Brent a month later: average", f"{month.mean():+.1f}%",
-              f"rose {(month > 0).mean():.0%} of the time", delta_color="off", border=True)
+              f"{verdict(20, month)} · rose {(month > 0).mean():.0%}", delta_color="off",
+              delta_arrow="off", border=True)
     ui.event_paths(results, paths, "#2a78d6", MATCH_TABLE, key="like_paths")
     st.markdown("**How every market moved after these stories**")
-    ui.market_reaction_table(by_market, data["typical"], key="like")
+    ui.market_reaction_table(by_market, data["typical"], key="like", sig=data["sig"])
     st.caption("Similarity is based on shared wording (rare words like place and company "
                "names count most), so check the headlines to judge how alike the stories "
                "really are. With about 10 matches, one big move can swing the average.")
@@ -300,10 +306,11 @@ def all_topics(data, available) -> None:
     market = ui.market_picker("news_cmp_market", data["markets"])
     results, paths = data["react"]["news"][market]
     ui.comparison_section(data["markets"][market], results, paths, "topic", available,
-                          LABELS, COLORS, key="news_cmp", market=mk.MARKETS[market][1])
+                          LABELS, COLORS, key="news_cmp", market=mk.MARKETS[market][1],
+                          sig=data["sig"], market_key=market)
     st.markdown("**The same news spikes in every market**")
     ui.cross_market_section(data["react"]["news"], data["typical"], "topic", available,
-                            LABELS, key="news_cmp")
+                            LABELS, key="news_cmp", sig=data["sig"])
     st.caption("Based on worldwide news spikes (GDELT).")
 
 
@@ -334,7 +341,7 @@ def explore_topic(prices, data) -> None:
                    market=name)
     st.markdown("**How every market moved after these spikes**")
     ui.market_reaction_table(by_market, data["typical"], key="news_topic",
-                             keep=lambda r: r["topic"] == topic)
+                             keep=lambda r: r["topic"] == topic, sig=data["sig"])
 
 
 @st.fragment
@@ -369,10 +376,13 @@ def search_section(data, archive) -> None:
         week = results["day_5_pct"]
         c1, c2, c3 = st.columns(3)
         c1.metric("News spikes found", len(results), border=True)
-        c2.metric("Brent a week later: average", f"{week.mean():+.1f}%", border=True)
+        c2.metric("Brent a week later: average", f"{week.mean():+.1f}%",
+                  mk.VERDICTS[data["sig"].check("BRENT", 5, week)][0], delta_color="off",
+                  delta_arrow="off", border=True)
         c3.metric("Brent rose afterwards", f"{(week > 0).mean():.0%}", border=True)
         ui.event_paths(results, paths, "#2a78d6", SPIKE_TABLE, key="news_search_paths")
         st.markdown("**How every market moved after these spikes**")
-        ui.market_reaction_table(by_market, data["typical"], key="news_search")
+        ui.market_reaction_table(by_market, data["typical"], key="news_search",
+                                 sig=data["sig"])
     with st.expander("Most recent matching stories"):
         headline_list(recent)
