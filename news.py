@@ -18,8 +18,9 @@ The history is refreshed once a day by a GitHub Action
 the website loads it instantly instead of querying GDELT on every visit.
 
 Run it with:
-    python news.py update      refresh the history file (takes ~1-2 minutes)
-    python news.py headlines   show the latest tagged headlines
+    python news.py update           refresh the history file (slow: GDELT rate limits)
+    python news.py save-headlines   save the latest headlines (website backup)
+    python news.py headlines        show the latest tagged headlines
 """
 
 import re
@@ -101,15 +102,19 @@ HEADLINE_QUERY = "(oil OR crude OR OPEC OR Brent) sourcelang:english"
 _last_request = [0.0]
 
 
-def gdelt(params: dict, tries: int = 5, spacing: float = 6) -> dict:
+def gdelt(params: dict, tries: int = 5, spacing: float = 6, timeout: float = 120,
+          backoff: float = 30) -> dict:
+    """Call GDELT politely. Background jobs use the patient defaults; the
+    website uses quick=True settings so a busy GDELT never stalls the page."""
     for attempt in range(tries):
         wait = spacing - (time.time() - _last_request[0])
         if wait > 0:
             time.sleep(wait)
-        response = requests.get(GDELT_URL, params={**params, "format": "json"}, timeout=120)
+        response = requests.get(GDELT_URL, params={**params, "format": "json"}, timeout=timeout)
         _last_request[0] = time.time()
         if response.status_code == 429:      # too many requests: back off
-            time.sleep(30 * (attempt + 1))
+            if attempt < tries - 1:
+                time.sleep(backoff * (attempt + 1))
             continue
         response.raise_for_status()
         try:
@@ -123,11 +128,13 @@ def gdelt(params: dict, tries: int = 5, spacing: float = 6) -> dict:
     raise RuntimeError("GDELT is busy (rate limit). Please try again in a minute.")
 
 
-def timeline(query: str, start: str = HISTORY_START, spacing: float = 6) -> pd.DataFrame:
+def timeline(query: str, start: str = HISTORY_START, spacing: float = 6,
+             quick: bool = False) -> pd.DataFrame:
     """Daily article counts for a query, plus all articles GDELT saw that day."""
-    data = gdelt({"query": query, "mode": "timelinevolraw", "startdatetime": start,
-                  "enddatetime": pd.Timestamp.now(tz="UTC").strftime("%Y%m%d%H%M%S")},
-                 spacing=spacing)
+    params = {"query": query, "mode": "timelinevolraw", "startdatetime": start,
+              "enddatetime": pd.Timestamp.now(tz="UTC").strftime("%Y%m%d%H%M%S")}
+    data = (gdelt(params, tries=2, spacing=0, timeout=30, backoff=6) if quick
+            else gdelt(params, spacing=spacing))
     points = (data.get("timeline") or [{}])[0].get("data", [])
     table = pd.DataFrame(points, columns=["date", "value", "norm"])
     table["date"] = pd.to_datetime(table["date"].str[:8])
@@ -144,16 +151,24 @@ def update() -> None:
     as GDELT finishes counting); new topics fetch the full history. Progress is
     saved after each topic, so an interrupted run resumes where it stopped."""
     TIMELINES_PATH.parent.mkdir(exist_ok=True)
-    table = load_timelines() if TIMELINES_PATH.exists() else pd.DataFrame(
-        columns=["topic", "date", "articles", "all_articles"])
-    for key, topic in TOPICS.items():
-        saved = table[table["topic"] == key]
-        if saved.empty:
+    table = load_timelines()
+    today = pd.Timestamp.now(tz="UTC").tz_localize(None).normalize()
+    last_saved = table.groupby("topic")["date"].max()
+    # Missing topics first (they matter most), then topics not refreshed today
+    missing = [k for k in TOPICS if k not in last_saved]
+    stale = [k for k in TOPICS if k in last_saved and last_saved[k] < today]
+    for key in missing + stale:
+        topic = TOPICS[key]
+        if key in missing:
             start, kind = HISTORY_START, "full history"
         else:
-            start, kind = (saved["date"].max() - pd.Timedelta(days=21)).strftime("%Y%m%d000000"), "recent days"
+            start, kind = (last_saved[key] - pd.Timedelta(days=21)).strftime("%Y%m%d000000"), "recent days"
         print(f"Fetching {kind}: {topic['label']}...")
-        fresh = timeline(topic["query"], start=start, spacing=10)
+        try:
+            fresh = timeline(topic["query"], start=start, spacing=10)
+        except RuntimeError as error:
+            print(f"  {error} Stopping here; progress so far is saved.")
+            break
         if fresh.empty:
             print("  (no data returned - keeping what we had)")
             continue
@@ -241,23 +256,52 @@ def classify(title: str) -> list[str]:
     return [key for key, t in TOPICS.items() if re.search(t["keywords"], title)]
 
 
-def headlines(hours: int = 24, limit: int = 75) -> pd.DataFrame:
-    data = gdelt({"query": HEADLINE_QUERY, "mode": "artlist", "maxrecords": limit,
-                  "timespan": f"{hours}h", "sort": "datedesc"})
+HEADLINES_PATH = TIMELINES_PATH.parent / "headlines.csv"
+HEADLINE_COLUMNS = ["time", "title", "source", "url", "topics"]
+
+
+def headlines(hours: int = 24, limit: int = 75, quick: bool = False) -> pd.DataFrame:
+    """Latest oil headlines. quick=True makes ONE short attempt (for the
+    website); otherwise it waits out GDELT's rate limits (for background jobs)."""
+    params = {"query": HEADLINE_QUERY, "mode": "artlist", "maxrecords": limit,
+              "timespan": f"{hours}h", "sort": "datedesc"}
+    data = (gdelt(params, tries=1, spacing=0, timeout=10) if quick
+            else gdelt(params))
     articles = pd.DataFrame(data.get("articles", []))
     if articles.empty:
-        return pd.DataFrame(columns=["time", "title", "source", "url", "topics"])
+        return pd.DataFrame(columns=HEADLINE_COLUMNS)
     articles = articles.drop_duplicates("title")
     articles["time"] = pd.to_datetime(articles["seendate"], format="%Y%m%dT%H%M%SZ", utc=True)
     articles["topics"] = articles["title"].apply(classify)
-    return articles.rename(columns={"domain": "source"})[
-        ["time", "title", "source", "url", "topics"]]
+    return articles.rename(columns={"domain": "source"})[HEADLINE_COLUMNS]
+
+
+def save_headlines() -> None:
+    """Save the latest headlines as a backup the website can always show."""
+    heads = headlines(hours=48)
+    if heads.empty:
+        print("No headlines returned - keeping the saved ones.")
+        return
+    HEADLINES_PATH.parent.mkdir(exist_ok=True)
+    heads.assign(topics=heads["topics"].str.join("|")).to_csv(HEADLINES_PATH, index=False)
+    print(f"Saved {len(heads)} headlines to {HEADLINES_PATH}")
+
+
+def load_saved_headlines() -> pd.DataFrame:
+    if not HEADLINES_PATH.exists():
+        return pd.DataFrame(columns=HEADLINE_COLUMNS)
+    saved = pd.read_csv(HEADLINES_PATH, keep_default_na=False)
+    saved["time"] = pd.to_datetime(saved["time"], utc=True, format="ISO8601")
+    saved["topics"] = saved["topics"].apply(lambda s: [t for t in s.split("|") if t in TOPICS])
+    return saved[HEADLINE_COLUMNS]
 
 
 def main() -> None:
     command = sys.argv[1] if len(sys.argv) > 1 else "update"
     if command == "update":
         update()
+    elif command == "save-headlines":
+        save_headlines()
     elif command == "headlines":
         for _, h in headlines().iterrows():
             print(f"{h['time']:%H:%M} {h['source']:25} {', '.join(h['topics']) or '-':20} {h['title'][:90]}")

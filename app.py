@@ -107,9 +107,6 @@ tab_news, tab_bots, tab_cond, tab_lab, tab_events = st.tabs([
     ":material/event: Scheduled events",
 ])
 
-with tab_news:
-    news_page.render(prices, data["timelines"], news_results, news_paths)
-
 with tab_bots:
     bot_dashboard.render()
 
@@ -201,6 +198,14 @@ results largely reflect the economy that prompted the decision.
         })
         st.caption("Measured from the close two business days before the change took effect, "
                    "so the reaction is never missed. Meetings where rates were held aren't included.")
+
+# ---------------------------------------------------------------------------
+# News tab - filled in LAST, although it's the first tab. The page is built
+# top to bottom, so anything slow here (e.g. the live news feed) can never
+# hold up the other tabs.
+# ---------------------------------------------------------------------------
+with tab_news:
+    news_page.render(prices, data["timelines"], news_results, news_paths)
 
 # ---------------------------------------------------------------------------
 # Footer

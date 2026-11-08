@@ -26,13 +26,22 @@ SPIKE_TABLE = {
 
 
 @st.cache_data(ttl=30 * 60, show_spinner=False)
-def latest_headlines() -> pd.DataFrame:
-    return news.headlines()
+def latest_headlines() -> tuple[pd.DataFrame, bool]:
+    """(headlines, live?). One quick try at GDELT - never more than ~10 seconds.
+    If GDELT is busy, fall back to the headlines a GitHub job saves every few
+    hours. Either result is cached for 30 minutes so GDELT isn't hammered."""
+    try:
+        live = news.headlines(quick=True)
+        if not live.empty:
+            return live, True
+    except Exception as error:
+        print(f"Live headlines unavailable, using saved ones: {error}")
+    return news.load_saved_headlines(), False
 
 
 @st.cache_data(ttl=24 * 60 * 60, show_spinner=False)
 def search_theme(query: str, prices: pd.Series):
-    t = news.timeline(query)
+    t = news.timeline(query, quick=True)
     if t.empty:
         return t, pd.DataFrame(), {}
     spikes = news.find_spikes(t.assign(topic="search"))
@@ -106,12 +115,11 @@ def render(prices: pd.Series, timelines: pd.DataFrame, results: pd.DataFrame,
     st.write("")
     ui.eyebrow("Latest headlines")
     st.subheader("Today's oil news, tagged by topic")
-    try:
-        heads = latest_headlines()
-    except Exception as error:
-        heads = None
-        st.info(f"Headlines are temporarily unavailable ({error}). The rest of the page still works.")
-    if heads is not None and not heads.empty:
+    heads, is_live = latest_headlines()
+    if not heads.empty:
+        if not is_live:
+            st.caption(f"The live news feed is busy, so these are recently saved headlines "
+                       f"(newest from {heads['time'].max():%b %d, %H:%M} UTC).")
         heads = heads.assign(tagged=heads["topics"].str.len() > 0).sort_values(
             ["tagged", "time"], ascending=[False, False]).head(15)
         now = pd.Timestamp.now(tz="UTC")
@@ -125,8 +133,9 @@ def render(prices: pd.Series, timelines: pd.DataFrame, results: pd.DataFrame,
                 f'{html.escape(h["source"])} · {hours}h ago</div></div>')
         st.markdown("".join(rows), unsafe_allow_html=True)
         st.caption("Headlines from the GDELT Project. Click to read the original article.")
-    elif heads is not None:
-        st.caption("No oil headlines found in the last 24 hours.")
+    else:
+        st.info("Headlines are temporarily unavailable because the news feed is busy. "
+                "They'll appear again shortly; the rest of the page works as normal.")
 
     # ---- 3. Explore a topic -----------------------------------------------------
     st.write("")
