@@ -18,7 +18,7 @@ The history is refreshed once a day by a GitHub Action
 the website loads it instantly instead of querying GDELT on every visit.
 
 Run it with:
-    python news.py update           refresh the history file (slow: GDELT rate limits)
+    python news.py update           refresh the topic + saved-theme history (slow: GDELT rate limits)
     python news.py save-headlines   save the latest headlines (website backup)
     python news.py headlines        show the latest tagged headlines
 """
@@ -96,6 +96,25 @@ TOPICS = {
 }
 HEADLINE_QUERY = "(oil OR crude OR OPEC OR Brent) sourcelang:english"
 
+# Popular search themes, downloaded ahead of time by the daily GitHub job
+# (news_data/themes.csv) so the website's search shows them instantly
+# without asking GDELT live. key: (label, GDELT query)
+THEMES = {
+    "hormuz": ("Strait of Hormuz", '"Strait of Hormuz"'),
+    "red_sea": ("Red Sea shipping", '"Red Sea" (shipping OR tanker OR Houthi)'),
+    "refinery_fire": ("Refinery fires & explosions", "refinery (fire OR explosion OR blaze)"),
+    "pipeline": ("Pipeline attacks & leaks", "pipeline (explosion OR leak OR sabotage OR shutdown) oil"),
+    "russia_oil": ("Russian oil exports", "Russia (oil OR crude) (exports OR ban OR \"price cap\")"),
+    "iran_nuclear": ("Iran nuclear talks", "Iran nuclear (deal OR talks OR agreement)"),
+    "venezuela": ("Venezuela oil", "Venezuela (oil OR crude OR PDVSA)"),
+    "libya": ("Libya oil shutdowns", "Libya oil (blockade OR shutdown OR field OR port)"),
+    "china_demand": ("China oil imports", "China (oil OR crude) (imports OR demand)"),
+    "price_war": ("Oil price war", '"price war" (oil OR crude OR Saudi)'),
+    "shale": ("U.S. shale output", "shale (production OR output OR drilling OR rigs)"),
+    "lockdown": ("Lockdowns & travel demand", "(lockdown OR lockdowns OR pandemic) (oil OR fuel OR travel)"),
+}
+THEMES_PATH = TIMELINES_PATH.parent / "themes.csv"
+
 
 # ---------------------------------------------------------------------------
 # A polite GDELT client: GDELT allows one request every 5 seconds
@@ -134,7 +153,8 @@ def timeline(query: str, start: str = HISTORY_START, spacing: float = 6,
     """Daily article counts for a query, plus all articles GDELT saw that day."""
     params = {"query": query, "mode": "timelinevolraw", "startdatetime": start,
               "enddatetime": pd.Timestamp.now(tz="UTC").strftime("%Y%m%d%H%M%S")}
-    data = (gdelt(params, tries=2, spacing=0, timeout=30, backoff=6) if quick
+    # quick (website search): up to 3 tries over ~30 seconds, then give up
+    data = (gdelt(params, tries=3, spacing=0, timeout=30, backoff=10) if quick
             else gdelt(params, spacing=spacing))
     points = (data.get("timeline") or [{}])[0].get("data", [])
     table = pd.DataFrame(points, columns=["date", "value", "norm"])
@@ -145,46 +165,61 @@ def timeline(query: str, start: str = HISTORY_START, spacing: float = 6,
 # ---------------------------------------------------------------------------
 # History and spikes
 # ---------------------------------------------------------------------------
-def update() -> None:
-    """Bring every topic's coverage history up to date (run daily).
+def update(searches: dict | None = None, path: Path = TIMELINES_PATH) -> bool:
+    """Bring every search's coverage history up to date (run daily).
+    searches: {key: (label, query)}; defaults to the news TOPICS.
 
-    Topics already saved only fetch the last 3 weeks (recent days get revised
-    as GDELT finishes counting); new topics fetch the full history. Progress is
-    saved after each topic, so an interrupted run resumes where it stopped."""
-    TIMELINES_PATH.parent.mkdir(exist_ok=True)
-    table = load_timelines()
+    Searches already saved only fetch the last 3 weeks (recent days get revised
+    as GDELT finishes counting); new ones fetch the full history. Progress is
+    saved after each one, so an interrupted run resumes where it stopped.
+    Returns False if GDELT's rate limit stopped the run early."""
+    if searches is None:
+        searches = {k: (t["label"], t["query"]) for k, t in TOPICS.items()}
+    path.parent.mkdir(exist_ok=True)
+    table = load_timelines(path)
     today = pd.Timestamp.now(tz="UTC").tz_localize(None).normalize()
     last_saved = table.groupby("topic")["date"].max()
-    # Missing topics first (they matter most), then topics not refreshed today
-    missing = [k for k in TOPICS if k not in last_saved]
-    stale = [k for k in TOPICS if k in last_saved and last_saved[k] < today]
+    # Missing searches first (they matter most), then ones not refreshed today
+    missing = [k for k in searches if k not in last_saved]
+    stale = [k for k in searches if k in last_saved and last_saved[k] < today]
     for key in missing + stale:
-        topic = TOPICS[key]
+        label, query = searches[key]
         if key in missing:
             start, kind = HISTORY_START, "full history"
         else:
             start, kind = (last_saved[key] - pd.Timedelta(days=21)).strftime("%Y%m%d000000"), "recent days"
-        print(f"Fetching {kind}: {topic['label']}...")
+        print(f"Fetching {kind}: {label}...")
         try:
-            fresh = timeline(topic["query"], start=start, spacing=10)
+            fresh = timeline(query, start=start, spacing=10)
         except RuntimeError as error:
             print(f"  {error} Stopping here; progress so far is saved.")
-            break
+            return False
         if fresh.empty:
             print("  (no data returned - keeping what we had)")
             continue
         fresh.insert(0, "topic", key)
         keep = table[~((table["topic"] == key) & (table["date"] >= fresh["date"].min()))]
         table = pd.concat([keep, fresh], ignore_index=True).sort_values(["topic", "date"])
-        table.to_csv(TIMELINES_PATH, index=False, date_format="%Y-%m-%d")
-    print(f"Saved {len(table):,} rows to {TIMELINES_PATH}")
+        table.to_csv(path, index=False, date_format="%Y-%m-%d")
+    print(f"Saved {len(table):,} rows to {path}")
+    return True
 
 
-def load_timelines() -> pd.DataFrame:
-    if not TIMELINES_PATH.exists():
+def load_timelines(path: Path = TIMELINES_PATH) -> pd.DataFrame:
+    if not path.exists():
         return pd.DataFrame({"topic": pd.Series(dtype=str), "date": pd.Series(dtype="datetime64[ns]"),
                              "articles": pd.Series(dtype=float), "all_articles": pd.Series(dtype=float)})
-    return pd.read_csv(TIMELINES_PATH, parse_dates=["date"])
+    return pd.read_csv(path, parse_dates=["date"])
+
+
+def update_all() -> None:
+    """Topics first (they drive the main page), then the search themes."""
+    if update():
+        update(THEMES, THEMES_PATH)
+
+
+def load_themes() -> pd.DataFrame:
+    return load_timelines(THEMES_PATH)
 
 
 def coverage(t: pd.DataFrame) -> pd.DataFrame:
@@ -309,7 +344,7 @@ def load_saved_headlines() -> pd.DataFrame:
 def main() -> None:
     command = sys.argv[1] if len(sys.argv) > 1 else "update"
     if command == "update":
-        update()
+        update_all()
     elif command == "save-headlines":
         save_headlines()
     elif command == "headlines":

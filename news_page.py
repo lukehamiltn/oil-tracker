@@ -39,14 +39,44 @@ def latest_headlines() -> tuple[pd.DataFrame, bool]:
     return news.load_saved_headlines(), False
 
 
-@st.cache_data(ttl=24 * 60 * 60, show_spinner=False)
-def search_theme(query: str, prices: pd.Series):
-    t = news.timeline(query, quick=True)
+def theme_results(t: pd.DataFrame, prices: pd.Series):
     if t.empty:
         return t, pd.DataFrame(), {}
     spikes = news.find_spikes(t.assign(topic="search"))
     results, paths = es.compute_results(prices, spikes) if not spikes.empty else (pd.DataFrame(), {})
     return t, results, paths
+
+
+@st.cache_data(ttl=24 * 60 * 60, show_spinner=False)
+def search_theme(query: str, prices: pd.Series):
+    """A live search of GDELT (can be turned away when GDELT is busy)."""
+    return theme_results(news.timeline(query, quick=True), prices)
+
+
+@st.cache_data(ttl=6 * 60 * 60, show_spinner=False)
+def saved_themes() -> pd.DataFrame:
+    return news.load_themes()
+
+
+@st.cache_data(ttl=6 * 60 * 60, show_spinner=False)
+def saved_theme(key: str, prices: pd.Series):
+    """A theme downloaded ahead of time by the daily GitHub job: instant."""
+    themes = saved_themes()
+    return theme_results(themes[themes["topic"] == key].drop(columns="topic"), prices)
+
+
+def _plain(text: str) -> str:
+    return " ".join(text.lower().replace('"', " ").split())
+
+
+def matching_theme(query: str, available: list[str]) -> str | None:
+    """If the typed search is one of the saved themes, use the saved copy."""
+    q = _plain(query)
+    for key in available:
+        label, theme_query = news.THEMES[key]
+        if q in (_plain(label), _plain(theme_query), _plain(key.replace("_", " "))):
+            return key
+    return None
 
 
 def status(heat: float) -> tuple[str, str]:
@@ -170,21 +200,46 @@ def explore_topic(prices, timelines, results, paths, available) -> None:
 
 @st.fragment
 def search_section(prices) -> None:
-    st.caption("Type words to search worldwide news since 2017, e.g. `\"Strait of Hormuz\"` "
-               "or `refinery fire`. Put exact phrases in quotes. We find the days that "
-               "theme suddenly dominated the news and show what Brent did next.")
+    themes = saved_themes()
+    available = [k for k in news.THEMES if k in set(themes["topic"])]
+    st.caption("Find the days a theme suddenly dominated worldwide news (since 2017) and "
+               "see what Brent did next. Popular themes load instantly; anything else is "
+               "searched live.")
+    pick = None
+    if available:
+        pick = st.pills("Popular themes", available, format_func=lambda k: news.THEMES[k][0],
+                        key="theme_pick")
     with st.form("news_search", border=False):
         c1, c2 = st.columns([4, 1], vertical_alignment="bottom")
-        query = c1.text_input("News theme", placeholder='"Strait of Hormuz"')
+        query = c1.text_input("Or type your own theme (put exact phrases in quotes)",
+                              placeholder='"Abqaiq" or refinery strike')
         submitted = c2.form_submit_button("Search history", width="stretch", type="primary")
-    if not (submitted and query.strip()):
+
+    if submitted and query.strip():
+        key = matching_theme(query, available)
+        if key:
+            t, results, paths = saved_theme(key, prices)
+        else:
+            with st.spinner("Searching the news archive (can take up to ~30 seconds)..."):
+                try:
+                    t, results, paths = search_theme(query.strip(), prices)
+                except Exception as error:
+                    print(f"Live search failed: {error}")
+                    st.warning(
+                        "The news archive (GDELT) is busy right now. It's a free service that "
+                        "limits how often it can be searched, and this website shares its "
+                        "connection with other sites, so live searches are sometimes turned "
+                        "away. Please try again in a minute or two, or pick one of the "
+                        "popular themes above, which always load instantly.")
+                    return
+    elif pick:
+        t, results, paths = saved_theme(pick, prices)
+    else:
         return
-    with st.spinner("Searching the news archive (this can take ~10 seconds)..."):
-        try:
-            t, results, paths = search_theme(query.strip(), prices)
-        except Exception as error:
-            st.warning(f"The news archive didn't respond ({error}). Please try again shortly.")
-            return
+    show_search_results(t, results, paths)
+
+
+def show_search_results(t: pd.DataFrame, results: pd.DataFrame, paths: dict) -> None:
     if t.empty or t["articles"].sum() == 0:
         st.info("No coverage found. Try fewer or simpler words.")
         return
