@@ -15,6 +15,7 @@ Outputs:
 import sqlite3
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 ROOT = Path(__file__).parent
@@ -53,16 +54,26 @@ def compute_results(prices: pd.Series, events: pd.DataFrame):
     Returns (results, paths):
       results - one row per event with its % change at each horizon
       paths   - {event date: % change for every day in WINDOW}
+    Events too recent (or too old) for a full window are left out, and so is
+    any window with a zero or negative price (e.g. WTI in April 2020).
+    All events are handled at once with array maths, which matters because
+    the site runs this for thousands of events in several markets.
     """
-    paths, rows = {}, []
-    for _, event in events.iterrows():
-        path = price_path(prices, event["date"])
-        if path is None:      # too recent (or too old) for a full window
-            continue
-        paths[event["date"]] = path
-        rows.append({**event.to_dict(),  # keep all the event's own columns
-                     **{f"day_{h}_pct": round(path[h], 2) for h in HORIZONS}})
-    return pd.DataFrame(rows), paths
+    if events.empty or prices.empty:
+        return pd.DataFrame(), {}
+    values = prices.to_numpy(dtype=float)
+    offsets = np.array(list(WINDOW))
+    base = prices.index.searchsorted(pd.DatetimeIndex(events["date"])) - 1  # day BEFORE
+    fits = (base + WINDOW.start >= 0) & (base + WINDOW.stop - 1 < len(values))
+    base = base[fits]
+    windows = values[base[:, None] + offsets]            # one row per event
+    usable = (windows > 0).all(axis=1)
+    pct = (windows[usable] / values[base[usable]][:, None] - 1) * 100
+    results = events[fits][usable].reset_index(drop=True)
+    for h in HORIZONS:
+        results[f"day_{h}_pct"] = pct[:, h - WINDOW.start].round(2)
+    paths = {date: pd.Series(row, index=offsets) for date, row in zip(results["date"], pct)}
+    return results, paths
 
 
 def price_path(prices: pd.Series, event_date: pd.Timestamp) -> pd.Series | None:
@@ -72,6 +83,8 @@ def price_path(prices: pd.Series, event_date: pd.Timestamp) -> pd.Series | None:
         return None
     values = prices.to_numpy()
     window = values[base_pos + WINDOW.start: base_pos + WINDOW.stop]
+    if (window <= 0).any():   # e.g. WTI at -$37 in April 2020: % changes are meaningless
+        return None
     return pd.Series((window / values[base_pos] - 1) * 100, index=list(WINDOW))
 
 

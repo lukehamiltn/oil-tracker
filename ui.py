@@ -9,6 +9,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 import event_study as es
+import markets as mk
 
 HORIZON_NAMES = {1: "1 day", 5: "1 week (5 trading days)", 20: "1 month (20 trading days)"}
 PCT = "%+.1f%%"
@@ -144,9 +145,13 @@ def average_path(paths: dict, dates) -> pd.Series:
 # Event-study sections (used by every event page)
 # ---------------------------------------------------------------------------
 @st.fragment
-def comparison_section(prices, results, paths, cat_col, categories, labels, colors, key):
-    """Average Brent path for every category, plus a summary table.
+def comparison_section(prices, results, paths, cat_col, categories, labels, colors, key,
+                       market: str = "Brent"):
+    """Average price path for every category, plus a summary table.
     (A fragment: changing its options only redraws this section.)"""
+    if results.empty:
+        st.info(f"No events of this kind have {market} price data yet.")
+        return
     fig = go.Figure()
     for cat in categories:
         dates = results.loc[results[cat_col] == cat, "date"]
@@ -156,7 +161,7 @@ def comparison_section(prices, results, paths, cat_col, categories, labels, colo
         fig.add_trace(go.Scatter(
             x=avg.index, y=avg.values, mode="lines", name=f"{labels[cat]} ({len(dates)})",
             line=dict(color=colors[cat], width=2.5), hovertemplate="%{y:+.1f}%"))
-    st.plotly_chart(style_event_chart(fig, "Average % change in Brent"), width="stretch",
+    st.plotly_chart(style_event_chart(fig, f"Average % change in {market}"), width="stretch",
                     key=f"{key}_avg_chart")
 
     horizon = st.segmented_control("Measure the change after", es.HORIZONS, default=1,
@@ -176,22 +181,22 @@ def comparison_section(prices, results, paths, cat_col, categories, labels, colo
         "best": st.column_config.NumberColumn("Best", format=PCT),
         "worst": st.column_config.NumberColumn("Worst", format=PCT),
     })
-    st.caption(f"For comparison: on any ordinary day, Brent's typical move over "
+    st.caption(f"For comparison: at any ordinary time, {market}'s typical move over "
                f"{HORIZON_NAMES[horizon]} is about ±{es.typical_move(prices, horizon):.1f}%. "
                "Results smaller than that may just be normal noise.")
 
 
 @st.fragment
 def drilldown_section(results, paths, cat_col, categories, labels, colors,
-                      table_columns, key, select_label="Category"):
+                      table_columns, key, select_label="Category", market: str = "Brent"):
     """Pick one category: each event (or the spread, if many) + a table."""
     cat = st.selectbox(select_label, categories, format_func=lambda c: labels[c],
                        key=f"{key}_select")
-    group = results[results[cat_col] == cat]
-    event_paths(group, paths, colors[cat], table_columns, key)
+    group = results[results[cat_col] == cat] if not results.empty else results
+    event_paths(group, paths, colors[cat], table_columns, key, market)
 
 
-def event_paths(group, paths, color, table_columns, key) -> None:
+def event_paths(group, paths, color, table_columns, key, market: str = "Brent") -> None:
     """Chart of the price path after each event in `group`, plus its table."""
     group = group.sort_values("date", ascending=False)
     if group.empty:
@@ -225,9 +230,81 @@ def event_paths(group, paths, color, table_columns, key) -> None:
     fig.add_trace(go.Scatter(x=avg.index, y=avg.values, mode="lines", name="Average",
                              line=dict(color=color, width=3.5),
                              hovertemplate="Average: %{y:+.1f}%<extra></extra>"))
-    fig = style_event_chart(fig, "% change in Brent")
+    fig = style_event_chart(fig, f"% change in {market}")
     fig.update_layout(hovermode="closest" if len(group) <= 60 else "x unified")
     st.plotly_chart(fig, width="stretch", key=f"{key}_drill_chart")
     st.caption(note)
-    st.dataframe(group[list(table_columns)], width="stretch", hide_index=True,
-                 key=f"{key}_events", column_config=table_columns)
+    st.dataframe(group[[c for c in table_columns if c in group]], width="stretch",
+                 hide_index=True, key=f"{key}_events", column_config=table_columns)
+
+
+# ---------------------------------------------------------------------------
+# Several markets
+# ---------------------------------------------------------------------------
+UP, DOWN = (27, 175, 122), (227, 73, 72)    # green / red (rgb)
+
+
+def market_picker(key: str, available, label: str = "Measure the reaction in") -> str:
+    """A row of buttons to choose which market the charts below measure."""
+    options = [k for k in mk.MARKETS if k in available]
+    return st.segmented_control(label, options, default="BRENT", key=key,
+                                format_func=lambda k: mk.MARKETS[k][1]) or "BRENT"
+
+
+def _shade(value: float, typical: float) -> str:
+    """Green for a rise, red for a fall; stronger when the move is large
+    compared with that market's ordinary moves."""
+    if pd.isna(value) or not typical:
+        return ""
+    strength = min(abs(value) / typical, 2) / 2          # 0 .. 1
+    r, g, b = UP if value > 0 else DOWN
+    return f"background-color: rgba({r},{g},{b},{0.08 + 0.5 * strength:.2f})"
+
+
+@st.fragment
+def cross_market_section(by_market: dict, typical: dict, cat_col, categories, labels, key):
+    """Average move after each kind of event, in every market side by side."""
+    horizon = st.segmented_control("Measured over", es.HORIZONS, default=5, key=f"{key}_xh",
+                                   format_func=lambda h: HORIZON_NAMES[h].split(" (")[0]) or 5
+    table = mk.by_category(by_market, cat_col, categories, labels, horizon)
+    table.loc["Typical move at any time (±)"] = [typical[horizon][k] for k in table.columns]
+    shades = pd.DataFrame("", index=table.index, columns=table.columns)
+    for k in table.columns:
+        shades[k] = [_shade(v, typical[horizon][k]) for v in table[k]]
+    shades.iloc[-1] = "color: #898781; font-style: italic"
+    styled = (table.style.format(lambda v: "" if pd.isna(v) else f"{v:+.1f}%")
+              .apply(lambda _: shades, axis=None))
+    styled = styled.format(lambda v: f"±{v:.1f}%", subset=pd.IndexSlice[table.index[-1], :])
+    st.dataframe(styled, width="stretch", key=f"{key}_xtable", column_config={
+        k: st.column_config.Column(mk.MARKETS[k][1]) for k in table.columns})
+    notes = " ".join(mk.NOTES[k] for k in table.columns if k in mk.NOTES)
+    st.caption("Average move from the close before each event. Green = rose, red = fell; "
+               "the stronger the colour, the bigger the move compared with that market's "
+               f"typical move (bottom row). {notes}")
+
+
+def market_reaction_table(by_market: dict, typical: dict, keep=None, key: str = "") -> None:
+    """Compact table: how every market moved after one set of events."""
+    table = mk.for_events(by_market, keep)
+    if table.empty:
+        return
+    table["typical_5"] = [typical[5][k] for k in table["key"]]
+    shown = table.set_index("market")[["events", "day_1_pct", "day_5_pct", "day_20_pct",
+                                       "pct_up_5", "typical_5"]]
+    shades = pd.DataFrame("", index=shown.index, columns=shown.columns)
+    for h in es.HORIZONS:
+        shades[f"day_{h}_pct"] = [_shade(v, typical[h][k]) for v, k in
+                                  zip(shown[f"day_{h}_pct"], table["key"])]
+    styled = shown.style.format({"events": "{:d}", "day_1_pct": "{:+.1f}%",
+                                 "day_5_pct": "{:+.1f}%", "day_20_pct": "{:+.1f}%",
+                                 "pct_up_5": "{:.0f}%", "typical_5": "±{:.1f}%"}
+                                ).apply(lambda _: shades, axis=None)
+    st.dataframe(styled, width="stretch", key=f"{key}_mtable", column_config={
+        "market": st.column_config.Column("Market"),
+        "events": st.column_config.Column("Events"),
+        "day_1_pct": st.column_config.Column("1 day"),
+        "day_5_pct": st.column_config.Column("1 week"),
+        "day_20_pct": st.column_config.Column("1 month"),
+        "pct_up_5": st.column_config.Column("Rose after a week"),
+        "typical_5": st.column_config.Column("Typical week (any time)"),
+    })

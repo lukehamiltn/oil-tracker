@@ -20,7 +20,9 @@ All free; government data unless noted.
 - **Market news:** Benzinga via Alpaca: every story about oil funds and oil
   companies since 2015 (saved in `news_data/market_news/`, one file per month,
   refreshed every 3 hours). Powers the live headlines and the instant search
-- **Prices:** Brent and WTI daily spot prices (EIA, via FRED)
+- **Prices:** Brent and WTI crude, NY Harbor gasoline and heating oil, Henry Hub
+  natural gas (EIA, via FRED), the broad dollar index (FRED) and the XLE
+  energy-stock fund (Alpaca). Every event is measured in all of them (`markets.py`)
 - **Inventories:** EIA weekly U.S. crude stocks (public spreadsheet, no API key)
 - **OPEC+ decisions:** hand-verified list in `events/opec_decisions.csv`
 - **Fed rate decisions:** Fed target rate (FRED `DFEDTAR` / `DFEDTARU`)
@@ -39,7 +41,7 @@ python -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements.txt
 
 # download / refresh data into data/oil.db
-.venv\Scripts\python.exe fetch_prices.py        # Brent and WTI prices
+.venv\Scripts\python.exe fetch_prices.py        # all market prices
 .venv\Scripts\python.exe inventory_events.py    # EIA weekly inventories
 .venv\Scripts\python.exe market_data.py         # CFTC positioning + dollar index
 .venv\Scripts\python.exe fed_events.py          # Fed rate changes

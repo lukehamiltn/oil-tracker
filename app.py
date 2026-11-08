@@ -23,6 +23,7 @@ import inventory_events as inv
 import lab_page
 import market_data as md
 import market_news as mn
+import markets as mk
 import news
 import news_page
 import strategies as strat
@@ -53,7 +54,8 @@ def get_data():
     with ThreadPoolExecutor(max_workers=4) as pool:
         list(pool.map(_download, (fetch_prices.main, inv.download_inventories,
                                   md.main, fed.download_fed)))
-    prices = es.load_prices()
+    prices = es.load_prices()                 # Brent: the site's main market
+    markets = mk.load_markets()               # Brent, WTI, gasoline, ... (markets.py)
     inv_events = inv.build_events(inv.load_inventories())
     timelines = news.load_timelines()   # refreshed daily by a GitHub Action
     archive = mn.load_archive()         # refreshed every 3 hours by a GitHub Action
@@ -61,17 +63,22 @@ def get_data():
     gdelt_spikes = mn.add_headlines(news.all_spikes(timelines), archive, mn.topic_match)
     market_spikes = mn.add_headlines(news.all_spikes(market_timelines, "market"),
                                      archive, mn.topic_match)
+    # Each set of events measured in every market: react[set][market] = (results, paths)
+    react = {name: mk.reactions(markets, events) for name, events in {
+        "opec": es.load_events(), "inventory": inv_events,
+        "fed": fed.build_events(fed.load_fed()), "news": gdelt_spikes,
+        "market_news": market_spikes}.items()}
     return {
         "prices": prices,
-        "opec": es.compute_results(prices, es.load_events()),
-        "inventory": es.compute_results(prices, inv_events),
+        "markets": markets,
+        "typical": mk.typical_moves(markets),
+        "react": react,
+        # Brent results, used throughout the site
+        **{name: react[name]["BRENT"] for name in react},
         "inv_events": inv_events,
-        "fed": es.compute_results(prices, fed.build_events(fed.load_fed())),
         "timelines": timelines,
-        "news": es.compute_results(prices, gdelt_spikes),
         "archive": archive,
         "market_timelines": market_timelines,
-        "market_news": es.compute_results(prices, market_spikes),
         "features": (features := strat.build_features(prices)),
         "backtests": bt.run_all(features),
     }
@@ -136,18 +143,47 @@ with tab_lab:
 # Scheduled events: EIA reports, OPEC+ meetings, Fed decisions.
 # A fragment: switching between them only redraws this tab, not the site.
 # ---------------------------------------------------------------------------
+EVENT_KINDS = {
+    "EIA weekly inventories": dict(
+        set="inventory", cat_col="category", categories=inv.CATEGORIES, labels=inv.LABELS,
+        colors=inv.COLORS, heading="size of surprise", select_label="Surprise size",
+        explore="Explore the reports", table_columns={
+            "date": st.column_config.DateColumn("Report date", format="YYYY-MM-DD"),
+            "change_mb": st.column_config.NumberColumn("Change (M bbl)", format="%+.1f"),
+            "normal_mb": st.column_config.NumberColumn("Normal (M bbl)", format="%+.1f"),
+            "surprise_mb": st.column_config.NumberColumn("Surprise (M bbl)", format="%+.1f"),
+            **ui.HORIZON_COLUMNS}),
+    "OPEC+ decisions": dict(
+        set="opec", cat_col="decision", categories=es.DECISIONS, labels=es.LABELS,
+        colors=es.COLORS, heading="decision type", select_label="Decision type",
+        explore="Explore individual decisions", table_columns={
+            "date": st.column_config.DateColumn("Date", format="YYYY-MM-DD"),
+            "size_mbd": st.column_config.NumberColumn("Size (mb/d)", format="%.2f"),
+            **ui.HORIZON_COLUMNS,
+            "description": st.column_config.TextColumn("What happened", width="large")}),
+    "Fed rate decisions": dict(
+        set="fed", cat_col="decision", categories=fed.CATEGORIES, labels=fed.LABELS,
+        colors=fed.COLORS, heading="type of rate change", select_label="Rate change type",
+        explore="Explore individual rate changes", table_columns={
+            "effective_date": st.column_config.DateColumn("Effective", format="YYYY-MM-DD"),
+            "size_bp": st.column_config.NumberColumn("Change (bp)", format="%+d"),
+            "new_rate": st.column_config.NumberColumn("New rate", format="%.2f%%"),
+            **ui.HORIZON_COLUMNS,
+            "description": st.column_config.TextColumn("What happened", width="large")}),
+}
+
+
 @st.fragment
 def scheduled_events() -> None:
     ui.eyebrow("Scheduled events")
-    st.subheader("How oil reacted to regular, scheduled market news", anchor=False)
-    kind = st.segmented_control(
-        "Event type", ["EIA weekly inventories", "OPEC+ decisions", "Fed rate decisions"],
-        default="EIA weekly inventories", key="event_kind") or "EIA weekly inventories"
+    st.subheader("How markets reacted to regular, scheduled news", anchor=False)
+    kind = st.segmented_control("Event type", list(EVENT_KINDS),
+                                default="EIA weekly inventories",
+                                key="event_kind") or "EIA weekly inventories"
+    k = EVENT_KINDS[kind]
 
     if kind == "EIA weekly inventories":
-        inv_results, inv_paths = data["inventory"]
         latest = data["inv_events"].iloc[-1]
-        similar = inv_results[inv_results["category"] == latest["category"]]
         st.markdown(f"""
 Every Wednesday the EIA reports how much crude oil is stored in the U.S. A **draw**
 (stocks falling) usually signals tight supply and tends to push prices **up**; a
@@ -157,63 +193,40 @@ that time of year* (5-year average), because stocks rise and fall with the seaso
 **Latest report ({latest['date']:%A %b %d, %Y}):** {latest['description']}, a surprise of
 **{latest['surprise_mb']:+.1f}M barrels** → *{inv.LABELS[latest['category']]}*.
 """)
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Similar past reports", f"{len(similar)}", border=True)
-        c2.metric("Brent on report day: average", f"{similar['day_1_pct'].mean():+.2f}%",
-                  border=True)
-        c3.metric("Brent rose on report day",
-                  f"{(similar['day_1_pct'] > 0).mean():.0%} of the time", border=True)
-        st.markdown("**Average reaction by size of surprise**")
-        ui.comparison_section(prices, inv_results, inv_paths, "category", inv.CATEGORIES,
-                              inv.LABELS, inv.COLORS, key="inv")
-        st.markdown("**Explore the reports**")
-        ui.drilldown_section(inv_results, inv_paths, "category", inv.CATEGORIES,
-                             inv.LABELS, inv.COLORS, key="inv", select_label="Surprise size",
-                             table_columns={
-            "date": st.column_config.DateColumn("Report date", format="YYYY-MM-DD"),
-            "change_mb": st.column_config.NumberColumn("Change (M bbl)", format="%+.1f"),
-            "normal_mb": st.column_config.NumberColumn("Normal (M bbl)", format="%+.1f"),
-            "surprise_mb": st.column_config.NumberColumn("Surprise (M bbl)", format="%+.1f"),
-            **ui.HORIZON_COLUMNS,
-        })
-
     elif kind == "OPEC+ decisions":
-        opec_results, opec_paths = data["opec"]
         st.markdown("Major OPEC+ production decisions since 1999, from a hand-verified list.")
-        st.markdown("**Average reaction by decision type**")
-        ui.comparison_section(prices, opec_results, opec_paths, "decision", es.DECISIONS,
-                              es.LABELS, es.COLORS, key="opec")
-        st.markdown("**Explore individual decisions**")
-        ui.drilldown_section(opec_results, opec_paths, "decision", es.DECISIONS,
-                             es.LABELS, es.COLORS, key="opec", select_label="Decision type",
-                             table_columns={
-            "date": st.column_config.DateColumn("Date", format="YYYY-MM-DD"),
-            "size_mbd": st.column_config.NumberColumn("Size (mb/d)", format="%.2f"),
-            **ui.HORIZON_COLUMNS,
-            "description": st.column_config.TextColumn("What happened", width="large"),
-        })
-
     else:
-        fed_results, fed_paths = data["fed"]
         st.markdown("""
 Every change in the Federal Reserve's target interest rate since 1990. The **first move
 of a new cycle** (a turn in policy) is separated from moves that **continue** a cycle.
 The Fed usually cuts when the economy weakens and hikes when it's running hot, so these
 results largely reflect the economy that prompted the decision.
 """)
-        st.markdown("**Average reaction by type of rate change**")
-        ui.comparison_section(prices, fed_results, fed_paths, "decision", fed.CATEGORIES,
-                              fed.LABELS, fed.COLORS, key="fed")
-        st.markdown("**Explore individual rate changes**")
-        ui.drilldown_section(fed_results, fed_paths, "decision", fed.CATEGORIES,
-                             fed.LABELS, fed.COLORS, key="fed", select_label="Rate change type",
-                             table_columns={
-            "effective_date": st.column_config.DateColumn("Effective", format="YYYY-MM-DD"),
-            "size_bp": st.column_config.NumberColumn("Change (bp)", format="%+d"),
-            "new_rate": st.column_config.NumberColumn("New rate", format="%.2f%%"),
-            **ui.HORIZON_COLUMNS,
-            "description": st.column_config.TextColumn("What happened", width="large"),
-        })
+
+    market = ui.market_picker("events_market", data["markets"])
+    name = mk.MARKETS[market][1]
+    results, paths = data["react"][k["set"]][market]
+
+    if kind == "EIA weekly inventories" and not results.empty:
+        similar = results[results["category"] == latest["category"]]
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Similar past reports", f"{len(similar)}", border=True)
+        c2.metric(f"{name} on report day: average", f"{similar['day_1_pct'].mean():+.2f}%",
+                  border=True)
+        c3.metric(f"{name} rose on report day",
+                  f"{(similar['day_1_pct'] > 0).mean():.0%} of the time", border=True)
+
+    st.markdown(f"**Average reaction in {mk.MARKETS[market][0]}, by {k['heading']}**")
+    ui.comparison_section(data["markets"][market], results, paths, k["cat_col"],
+                          k["categories"], k["labels"], k["colors"], key=k["set"], market=name)
+    st.markdown("**The same events in every market**")
+    ui.cross_market_section(data["react"][k["set"]], data["typical"], k["cat_col"],
+                            k["categories"], k["labels"], key=k["set"])
+    st.markdown(f"**{k['explore']}** (in {mk.MARKETS[market][0]})")
+    ui.drilldown_section(results, paths, k["cat_col"], k["categories"], k["labels"],
+                         k["colors"], key=k["set"], select_label=k["select_label"],
+                         table_columns=k["table_columns"], market=name)
+    if kind == "Fed rate decisions":
         st.caption("Measured from the close two business days before the change took effect, "
                    "so the reaction is never missed. Meetings where rates were held aren't included.")
 
@@ -273,7 +286,9 @@ oil market did next.
   feed has a few dozen oil stories a day rather than thousands.
 
 ### Other data
-- **Prices:** daily Brent crude spot prices from the U.S. EIA, via FRED.
+- **Prices:** daily spot prices from the U.S. EIA via FRED for Brent and WTI crude,
+  NY Harbor gasoline and heating oil, and Henry Hub natural gas; the Fed's broad
+  dollar index (FRED); and the XLE energy-stock fund (Alpaca, dividends included).
 - **Inventories:** EIA weekly U.S. crude stocks, reports since 2006.
 - **OPEC+ decisions:** a hand-verified list of major decisions since 1999.
 - **Fed rate decisions:** the Fed's target rate via FRED; each change since 1990.
@@ -283,6 +298,10 @@ oil market did next.
 
 ### Method
 - **Starting point:** the closing price on the last trading day *before* each event.
+- **Several markets:** every event is measured the same way in each market. Markets
+  move by very different amounts (natural gas swings far more than the dollar), so
+  each is compared with its own typical move. Windows containing a zero or negative
+  price (WTI in April 2020) are left out of that market.
 - **Inventory surprise:** the week's change minus the average change for the same
   week over the previous 5 years (analyst forecasts aren't freely available).
 - **Market conditions:** today's readings are compared with every day since 2007;

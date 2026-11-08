@@ -16,6 +16,7 @@ import streamlit as st
 
 import event_study as es
 import market_news as mn
+import markets as mk
 import news
 import ui
 
@@ -62,17 +63,16 @@ def latest_headlines(_archive: pd.DataFrame) -> tuple[pd.DataFrame, bool]:
 
 
 @st.cache_data(ttl=6 * 60 * 60, show_spinner=False, max_entries=200)
-def search_archive(query: str, _archive: pd.DataFrame, _prices: pd.Series):
-    """Search the saved market news archive: instant, no outside requests."""
+def search_archive(query: str, _archive: pd.DataFrame, _markets: dict):
+    """Search the saved market news archive: instant, no outside requests.
+    Returns (daily counts, {market: (results, paths)}, most recent stories)."""
     match = mn.search_mask(_archive, query)
     t = mn.counts(_archive, match, "search")
     spikes = news.find_spikes(t, source="market", min_articles=3)
     spikes = mn.add_headlines(spikes, _archive,
                               lambda window, spike: mn.search_mask(window, query))
-    results, paths = (es.compute_results(_prices, spikes) if not spikes.empty
-                      else (pd.DataFrame(), {}))
     recent = _archive[match].sort_values("time", ascending=False).head(8)
-    return t, results, paths, recent
+    return t, mk.reactions(_markets, spikes), recent
 
 
 def status(heat: float) -> tuple[str, str]:
@@ -169,7 +169,7 @@ def render(prices: pd.Series, data: dict) -> None:
         st.write("")
         ui.eyebrow("Like this before")
         st.subheader("Has a story like this happened before?", anchor=False)
-        like_this_before(prices, archive, heads.head(15))
+        like_this_before(data, archive, heads.head(15))
 
     # ---- 4. Explore a topic -----------------------------------------------------
     st.write("")
@@ -182,17 +182,14 @@ def render(prices: pd.Series, data: dict) -> None:
     if not news_results.empty:
         st.write("")
         ui.eyebrow("All topics")
-        st.subheader("Average Brent move after a news spike, by topic", anchor=False)
-        available = [k for k in TOPIC_KEYS if k in set(news_results["topic"])]
-        ui.comparison_section(prices, news_results, news_paths, "topic", available,
-                              LABELS, COLORS, key="news_cmp")
-        st.caption("Based on worldwide news spikes (GDELT).")
+        st.subheader("Average market move after a news spike, by topic", anchor=False)
+        all_topics(data, [k for k in TOPIC_KEYS if k in set(news_results["topic"])])
 
     # ---- 5. Search the archive ---------------------------------------------------
     st.write("")
     ui.eyebrow("Search the past")
     st.subheader("Look up any news theme", anchor=False)
-    search_section(prices, archive)
+    search_section(data, archive)
 
 
 @st.fragment
@@ -244,16 +241,17 @@ def matcher(_archive: pd.DataFrame, version: str):
 
 @st.cache_data(ttl=6 * 60 * 60, show_spinner=False, max_entries=300)
 def past_matches(text: str, before: pd.Timestamp, _archive: pd.DataFrame,
-                 _prices: pd.Series, version: str):
+                 _markets: dict, version: str) -> dict:
+    """{market: (results, paths)} for the past stories most like `text`."""
     found = mn.similar(matcher(_archive, version), text, before)
     if found.empty:
-        return found, {}
+        return {}
     found = found.assign(date=found["day"], description=found["headline"])
-    return es.compute_results(_prices, found)
+    return mk.reactions(_markets, found)
 
 
 @st.fragment
-def like_this_before(prices, archive, heads) -> None:
+def like_this_before(data, archive, heads) -> None:
     st.caption("Pick one of today's headlines, or type your own. We find the past stories "
                "worded most like it, and show what Brent did after each one.")
     options = heads["headline"].tolist() if not heads.empty else []
@@ -274,7 +272,8 @@ def like_this_before(prices, archive, heads) -> None:
             before = row["time"].iloc[0] - pd.Timedelta(days=14)
     before = before.floor("h")
     version = f"{len(archive)}-{archive['time'].max()}"
-    results, paths = past_matches(text, before, archive, prices, version)
+    by_market = past_matches(text, before, archive, data["markets"], version)
+    results, paths = by_market.get("BRENT", (pd.DataFrame(), {}))
     if results.empty:
         st.info("No past stories are worded closely enough to compare. Try a more "
                 "specific headline (names of places, companies or events help most).")
@@ -288,9 +287,24 @@ def like_this_before(prices, archive, heads) -> None:
     m4.metric("Brent a month later: average", f"{month.mean():+.1f}%",
               f"rose {(month > 0).mean():.0%} of the time", delta_color="off", border=True)
     ui.event_paths(results, paths, "#2a78d6", MATCH_TABLE, key="like_paths")
+    st.markdown("**How every market moved after these stories**")
+    ui.market_reaction_table(by_market, data["typical"], key="like")
     st.caption("Similarity is based on shared wording (rare words like place and company "
                "names count most), so check the headlines to judge how alike the stories "
                "really are. With about 10 matches, one big move can swing the average.")
+
+
+@st.fragment
+def all_topics(data, available) -> None:
+    """Average move after a news spike, by topic, in any market."""
+    market = ui.market_picker("news_cmp_market", data["markets"])
+    results, paths = data["react"]["news"][market]
+    ui.comparison_section(data["markets"][market], results, paths, "topic", available,
+                          LABELS, COLORS, key="news_cmp", market=mk.MARKETS[market][1])
+    st.markdown("**The same news spikes in every market**")
+    ui.cross_market_section(data["react"]["news"], data["typical"], "topic", available,
+                            LABELS, key="news_cmp")
+    st.caption("Based on worldwide news spikes (GDELT).")
 
 
 @st.fragment
@@ -301,7 +315,10 @@ def explore_topic(prices, data) -> None:
                                   format_func=lambda k: SOURCE_NAMES[k],
                                   key="news_source") or "gdelt"
     timelines = data["timelines"] if source == "gdelt" else data["market_timelines"]
-    results, paths = data["news"] if source == "gdelt" else data["market_news"]
+    by_market = data["react"]["news" if source == "gdelt" else "market_news"]
+    market = ui.market_picker("news_topic_market", data["markets"])
+    name = mk.MARKETS[market][1]
+    results, paths = by_market[market]
     t = timelines[timelines["topic"] == topic]
     if t.empty:
         st.info("No data for this topic from this source yet.")
@@ -312,12 +329,16 @@ def explore_topic(prices, data) -> None:
     else:
         st.caption("Share of all saved oil-market news whose headline matches this topic.")
     coverage_chart(t, spikes, COLORS[topic], key="news_cov", source=source)
-    st.markdown(f"**Brent after each of the {len(spikes)} news spikes**")
-    ui.event_paths(spikes, paths, COLORS[topic], SPIKE_TABLE, key="news_topic_paths")
+    st.markdown(f"**{name} after each of the {len(spikes)} news spikes**")
+    ui.event_paths(spikes, paths, COLORS[topic], SPIKE_TABLE, key="news_topic_paths",
+                   market=name)
+    st.markdown("**How every market moved after these spikes**")
+    ui.market_reaction_table(by_market, data["typical"], key="news_topic",
+                             keep=lambda r: r["topic"] == topic)
 
 
 @st.fragment
-def search_section(prices, archive) -> None:
+def search_section(data, archive) -> None:
     if archive.empty:
         st.info("The news archive is still being built; please check back soon.")
         return
@@ -333,7 +354,8 @@ def search_section(prices, archive) -> None:
     query = typed.strip() if submitted and typed.strip() else pick
     if not query:
         return
-    t, results, paths, recent = search_archive(query, archive, prices)
+    t, by_market, recent = search_archive(query, archive, data["markets"])
+    results, paths = by_market.get("BRENT", (pd.DataFrame(), {}))
     if recent.empty:
         st.info(f"No stories found for {query}. Try fewer or simpler words.")
         return
@@ -350,5 +372,7 @@ def search_section(prices, archive) -> None:
         c2.metric("Brent a week later: average", f"{week.mean():+.1f}%", border=True)
         c3.metric("Brent rose afterwards", f"{(week > 0).mean():.0%}", border=True)
         ui.event_paths(results, paths, "#2a78d6", SPIKE_TABLE, key="news_search_paths")
+        st.markdown("**How every market moved after these spikes**")
+        ui.market_reaction_table(by_market, data["typical"], key="news_search")
     with st.expander("Most recent matching stories"):
         headline_list(recent)
