@@ -79,6 +79,7 @@ TOPICS = {
         "query": 'hurricane ("Gulf of Mexico" OR "Gulf Coast" OR refineries OR offshore) oil',
         "keywords": r"hurricane|tropical storm|gulf of mexico|gulf coast",
         "color": "#008300",
+        "months": [6, 7, 8, 9, 10, 11],   # Atlantic hurricane season (Jun-Nov)
     },
     "demand": {
         "label": "Oil demand & recession fears",
@@ -208,7 +209,16 @@ def find_spikes(t: pd.DataFrame, category: str = "topic") -> pd.DataFrame:
     starting price is from before the story broke even if it broke the
     previous evening (news is dated in UTC; markets are not)."""
     c = coverage(t)
-    hot = c[(c["ratio"] >= SPIKE_RATIO) & (c["articles"] >= MIN_ARTICLES)]
+    # A spike must also be a busy day by the topic's own standards: in the top
+    # 10% of its daily article counts over the previous 12 months. This stops
+    # usually-quiet topics "spiking" on a handful of articles.
+    busy_day = c["articles"].shift(1).rolling(365, min_periods=90).quantile(0.90)
+    hot = c[(c["ratio"] >= SPIKE_RATIO) & (c["articles"] >= MIN_ARTICLES)
+            & ~(c["articles"] < busy_day)]
+    topic = t["topic"].iloc[0] if "topic" in t and len(t) else None
+    months = TOPICS.get(topic, {}).get("months")
+    if months:   # seasonal topics (hurricanes) only count in season
+        hot = hot[hot["date"].dt.month.isin(months)]
     rows, last = [], None
     for _, day in hot.iterrows():
         if last is not None and (day["date"] - last).days < COOLDOWN_DAYS:

@@ -232,7 +232,10 @@ oil market did next.
   doesn't distort comparisons.
 - **News spike:** a day when a topic got at least {news.SPIKE_RATIO:.0f}× its normal share
   of coverage (normal = median of the previous {news.BASELINE_DAYS} days), with at least
-  {news.MIN_ARTICLES} articles. Spikes must be {news.COOLDOWN_DAYS}+ days apart.
+  {news.MIN_ARTICLES} articles, and among the topic's busiest 10% of days over the
+  previous year. Spikes must be {news.COOLDOWN_DAYS}+ days apart. Hurricane spikes only
+  count in hurricane season (June–November). Days when GDELT itself collected
+  unusually few articles are skipped.
 - **Timing:** we start from the close one business day *before* the spike, so the
   reaction isn't missed if the story broke the evening before.
 - **Headlines** are tagged by keyword, so a few may land in the wrong topic.
