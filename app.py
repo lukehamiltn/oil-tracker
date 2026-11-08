@@ -81,7 +81,7 @@ left.markdown(
     '<p class="hero-sub">Today\'s oil news, matched to similar moments in the past, '
     'and what the market did next.</p>', unsafe_allow_html=True)
 # A popover opens instantly in the browser (no page re-run).
-about = right.popover("How this works", icon=":material/info:", width="stretch")
+about = right.popover("ℹ️ How this works", width="stretch")
 
 st.write("")
 heat, _ = news_page.current_heat(data)
