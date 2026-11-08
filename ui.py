@@ -62,11 +62,13 @@ def chip(text: str, color: str) -> str:
 
 
 def topic_picker(label: str, options: list, labels: dict, colors: dict, key: str,
-                 default=None, none_text: str = "") -> str | None:
+                 default=None, none_text: str = "",
+                 clear_text: str | None = None) -> str | None:
     """A compact button that opens a panel of chips, each in its topic's own
     colour (Streamlit menus can only show plain text, so the chips are
     coloured here with CSS, by their position in the group). The current
-    choice is shown as a chip beside the button."""
+    choice is shown as a chip beside the button; with clear_text, a small
+    button next to it removes the choice again."""
     rules = []
     for i, option in enumerate(options):
         c = colors[option]
@@ -83,8 +85,14 @@ def topic_picker(label: str, options: list, labels: dict, colors: dict, key: str
         picked = st.pills(label, options, format_func=labels.get, key=key,
                           default=default, label_visibility="collapsed")
     chosen = picked or default
-    right.markdown(chip(labels[chosen], colors[chosen]) if chosen else
-                   f'<span style="color:#898781">{none_text}</span>', unsafe_allow_html=True)
+    row = right.container(horizontal=True, vertical_alignment="center", gap="small")
+    row.markdown(chip(labels[chosen], colors[chosen]) if chosen else
+                 f'<span style="color:#898781">{none_text}</span>', unsafe_allow_html=True)
+    if clear_text and picked:
+        def clear() -> None:       # runs before the redraw, so the chips reset too
+            st.session_state[key] = None
+        row.button(clear_text, icon=":material/close:", type="tertiary",
+                   key=f"{key}_clear", on_click=clear)
     return chosen
 
 
