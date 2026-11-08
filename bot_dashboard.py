@@ -57,7 +57,7 @@ def load_bot_data():
     return {
         "account_equity": float(account.equity), "started": started,
         "books": books, "fills": all_fills, "price_now": price_now,
-        "closes": closes, "history": history, "signals": bot.signals(download=False),
+        "closes": closes, "history": history, "signals": bot.signals(download=False, client=data),
     }
 
 
@@ -67,8 +67,8 @@ def render() -> None:
     st.markdown(f"""
 Two automated bots trade **fake money** in a paper account at **real market
 prices** (via Alpaca). Each starts with **$50,000** and trades **{bot.SYMBOL}**,
-a fund that tracks Brent crude futures. They check every weekday shortly
-before the 4pm ET close and only trade when their decision changes.
+a fund that tracks Brent crude futures. They check every weekday in the
+two hours before the 4pm ET close and only trade when their decision changes.
 
 - **Weak dollar bot:** owns {bot.SYMBOL} while the U.S. dollar is below its 50-day average.
 - **Trend bot:** owns {bot.SYMBOL} while its price is above its 200-day average.

@@ -105,8 +105,8 @@ _last_request = [0.0]
 
 def gdelt(params: dict, tries: int = 5, spacing: float = 6, timeout: float = 120,
           backoff: float = 30) -> dict:
-    """Call GDELT politely. Background jobs use the patient defaults; the
-    website uses quick=True settings so a busy GDELT never stalls the page."""
+    """Call GDELT politely, waiting out its rate limits. Only the daily
+    GitHub job calls this; the website never asks GDELT anything live."""
     for attempt in range(tries):
         wait = spacing - (time.time() - _last_request[0])
         if wait > 0:
@@ -129,14 +129,11 @@ def gdelt(params: dict, tries: int = 5, spacing: float = 6, timeout: float = 120
     raise RuntimeError("GDELT is busy (rate limit). Please try again in a minute.")
 
 
-def timeline(query: str, start: str = HISTORY_START, spacing: float = 6,
-             quick: bool = False) -> pd.DataFrame:
+def timeline(query: str, start: str = HISTORY_START, spacing: float = 6) -> pd.DataFrame:
     """Daily article counts for a query, plus all articles GDELT saw that day."""
     params = {"query": query, "mode": "timelinevolraw", "startdatetime": start,
               "enddatetime": pd.Timestamp.now(tz="UTC").strftime("%Y%m%d%H%M%S")}
-    # quick (website search): up to 3 tries over ~30 seconds, then give up
-    data = (gdelt(params, tries=3, spacing=0, timeout=30, backoff=10) if quick
-            else gdelt(params, spacing=spacing))
+    data = gdelt(params, spacing=spacing)
     points = (data.get("timeline") or [{}])[0].get("data", [])
     table = pd.DataFrame(points, columns=["date", "value", "norm"])
     table["date"] = pd.to_datetime(table["date"].str[:8])
@@ -276,6 +273,8 @@ def current_heat(timelines: pd.DataFrame, source: str = "gdelt") -> pd.DataFrame
         recent = c.tail(3)
         normal = c["normal"].iloc[-1]
         ratio = recent["share_per_million"].mean() / normal if normal else float("nan")
+        if pd.isna(ratio):          # not enough history to say what's normal
+            continue
         rows.append({"topic": key, "label": TOPICS[key]["label"], "heat": ratio,
                      "articles_3d": int(recent["articles"].sum()),
                      "last_day": c["date"].iloc[-1]})

@@ -72,12 +72,15 @@ def _headers() -> dict:
 
 def _clean(text: str, limit: int) -> str:
     text = re.sub(r"<[^>]+>", " ", html.unescape(text or ""))
+    text = text.replace("\ufffd", "'")      # broken apostrophes in the source data
     return " ".join(text.split())[:limit]
 
 
 def fetch(start: pd.Timestamp, end: pd.Timestamp, timeout: float = 30,
-          max_pages: int | None = None) -> pd.DataFrame:
-    """All articles for our tickers between start and end (UTC timestamps)."""
+          max_pages: int | None = None, waits: int = 3) -> pd.DataFrame:
+    """All articles for our tickers between start and end (UTC timestamps).
+    If Alpaca says "too many requests", wait 20s and retry, at most `waits`
+    times (the website passes 0, so it never waits)."""
     headers, rows, token, pages = _headers(), [], None, 0
     while True:
         params = {"symbols": ",".join(SYMBOLS), "limit": 50, "sort": "desc",
@@ -86,7 +89,8 @@ def fetch(start: pd.Timestamp, end: pd.Timestamp, timeout: float = 30,
         if token:
             params["page_token"] = token
         response = requests.get(NEWS_URL, headers=headers, params=params, timeout=timeout)
-        if response.status_code == 429:          # over 200 a minute: wait it out
+        if response.status_code == 429 and waits > 0:   # over 200 a minute
+            waits -= 1
             time.sleep(20)
             continue
         response.raise_for_status()
@@ -132,6 +136,12 @@ def update() -> None:
         start = month.start_time.tz_localize("UTC")
         end = min(month.end_time.tz_localize("UTC"), now)
         table = fetch(start, end)
+        if path.exists():
+            saved = len(pd.read_csv(path, usecols=["headline"]))
+            if len(table) < 0.8 * saved:      # a glitch, not news disappearing
+                print(f"{month}: got {len(table):,} articles but {saved:,} are saved; "
+                      "keeping the saved copy")
+                continue
         table.to_csv(path, index=False)
         print(f"{month}: {len(table):,} articles")
 
@@ -142,8 +152,8 @@ def load_archive() -> pd.DataFrame:
         return pd.DataFrame(columns=COLUMNS).assign(time=pd.Series(dtype="datetime64[ns, UTC]"))
     t = pd.concat([pd.read_csv(f, keep_default_na=False) for f in files], ignore_index=True)
     t["time"] = pd.to_datetime(t["time"], utc=True, format="ISO8601")
-    for column in ("headline", "summary"):   # broken apostrophes in the source data
-        t[column] = t[column].str.replace("�", "'", regex=False)
+    for column in ("headline", "summary"):   # (older files: broken apostrophes)
+        t[column] = t[column].str.replace("\ufffd", "'", regex=False)
     t["day"] = t["time"].dt.tz_convert(MARKET_TZ).dt.tz_localize(None).dt.normalize()
     t["topics"] = t["topics"].map(lambda s: [k for k in s.split("|") if k in news.TOPICS])
     t["text"] = (t["headline"] + " " + t["summary"]).str.lower()   # for searching
@@ -193,11 +203,14 @@ def add_headlines(spikes: pd.DataFrame, archive: pd.DataFrame,
     every past spike shows what the news actually said."""
     if spikes.empty or archive.empty:
         return spikes.assign(headline="")
+    by_day = {day: rows for day, rows in archive.groupby("day")}
+    empty = archive.iloc[0:0]
     found = []
     for _, spike in spikes.iterrows():
         day = spike["spike_day"]
-        window = archive[(archive["day"] >= day - pd.Timedelta(days=1)) & (archive["day"] <= day)]
-        hits = window[match_for(window, spike)]
+        window = pd.concat([by_day.get(day - pd.Timedelta(days=1), empty),
+                            by_day.get(day, empty)])
+        hits = window[match_for(window, spike)] if len(window) else window
         found.append(hits["headline"].iloc[-1] if len(hits) else "")
     spikes = spikes.assign(headline=found)
     spikes["description"] = [f"{h}<br>{d}" if h else d
@@ -255,7 +268,7 @@ def oil_related(t: pd.DataFrame) -> pd.DataFrame:
 def latest(hours: int = 48) -> pd.DataFrame:
     """Live: the newest oil headlines (one quick request)."""
     now = pd.Timestamp.now(tz="UTC")
-    t = fetch(now - pd.Timedelta(hours=hours), now, timeout=10, max_pages=4)
+    t = fetch(now - pd.Timedelta(hours=hours), now, timeout=10, max_pages=4, waits=0)
     t["topics"] = t["topics"].map(lambda s: [k for k in s.split("|") if k])
     return oil_related(t).sort_values("time", ascending=False)
 

@@ -15,9 +15,6 @@ Outputs:
 import sqlite3
 from pathlib import Path
 
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 import pandas as pd
 
 ROOT = Path(__file__).parent
@@ -60,8 +57,7 @@ def compute_results(prices: pd.Series, events: pd.DataFrame):
     paths, rows = {}, []
     for _, event in events.iterrows():
         path = price_path(prices, event["date"])
-        if path is None:
-            print(f"  skipped {event['date'].date()} (not enough price data)")
+        if path is None:      # too recent (or too old) for a full window
             continue
         paths[event["date"]] = path
         rows.append({**event.to_dict(),  # keep all the event's own columns
@@ -71,15 +67,12 @@ def compute_results(prices: pd.Series, events: pd.DataFrame):
 
 def price_path(prices: pd.Series, event_date: pd.Timestamp) -> pd.Series | None:
     """% change from the base day for each day in WINDOW (None if not enough data)."""
-    before = prices.index[prices.index < event_date]
-    if len(before) == 0:
+    base_pos = prices.index.searchsorted(event_date) - 1   # last day BEFORE the event
+    if base_pos + WINDOW.start < 0 or base_pos + WINDOW.stop - 1 >= len(prices):
         return None
-    base_pos = prices.index.get_loc(before[-1])
-    if base_pos + WINDOW.stop - 1 >= len(prices) or base_pos + WINDOW.start < 0:
-        return None
-    base_price = prices.iloc[base_pos]
-    path = {d: (prices.iloc[base_pos + d] / base_price - 1) * 100 for d in WINDOW}
-    return pd.Series(path)
+    values = prices.to_numpy()
+    window = values[base_pos + WINDOW.start: base_pos + WINDOW.stop]
+    return pd.Series((window / values[base_pos] - 1) * 100, index=list(WINDOW))
 
 
 def typical_move(prices: pd.Series, days: int) -> float:
@@ -89,6 +82,10 @@ def typical_move(prices: pd.Series, days: int) -> float:
 
 
 def main() -> None:
+    import matplotlib            # only needed for this chart, not by the website
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
     prices = load_prices()
     results, paths = compute_results(prices, load_events())
     results.to_csv(RESULTS_PATH, index=False, date_format="%Y-%m-%d")

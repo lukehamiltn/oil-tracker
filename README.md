@@ -77,7 +77,7 @@ are in `ui.py`; the site theme is in `.streamlit/config.toml`.
 `bot.py` runs two bots ($50k each, labelled orders in one Alpaca paper account):
 *Weak dollar* (own BNO while the dollar is below its 50-day average) and *Trend*
 (own BNO while BNO is above its 200-day average). They run on
-weekdays near the close via GitHub Actions (`.github/workflows/bot.yml`).
+weekdays in the 2 hours before the close via GitHub Actions (`.github/workflows/bot.yml`).
 
 Keys are never committed. They live in:
 - `.env` locally (`ALPACA_API_KEY=...`, `ALPACA_SECRET_KEY=...`)

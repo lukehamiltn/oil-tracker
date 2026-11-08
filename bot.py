@@ -11,7 +11,7 @@ Every order is labelled with its bot's name (Alpaca's client_order_id, e.g.
 from its own fills - see ledger(). The rules are the same functions the
 backtest uses (strategies.py).
 
-They run automatically on weekdays shortly before the 4pm ET close
+They run automatically on weekdays in the 2 hours before the 4pm ET close
 (see .github/workflows/bot.yml) and only trade when a decision changes.
 
 Run it yourself with:
@@ -42,7 +42,8 @@ BOTS = {
     "trend_200d": {"label": "Trend bot (200-day)", "budget": 50_000},
 }
 INVEST_FRACTION = 0.98                 # keep 2% of a bot's cash as a buffer
-TRADE_WINDOW = timedelta(minutes=45)   # only trade in the last 45 min before close
+TRADE_WINDOW = timedelta(hours=2)     # only trade in the last 2 hours before the close
+                                      # (wide, because GitHub often starts runs late)
 
 
 # ---------------------------------------------------------------------------
@@ -101,12 +102,13 @@ def trend_reading(client: StockHistoricalDataClient | None = None) -> float:
     return float(strat.trend_gap(closes).iloc[-1])
 
 
-def signals(download: bool = True) -> dict[str, tuple[bool, str]]:
+def signals(download: bool = True,
+            client: StockHistoricalDataClient | None = None) -> dict[str, tuple[bool, str]]:
     """{bot: (own oil?, human-readable reason)} as of right now."""
     if download:
         md.download_dollar()
     dollar = dollar_reading()
-    trend = trend_reading()
+    trend = trend_reading(client)
     return {
         "weak_dollar": (dollar < 0, f"Dollar {dollar:+.2f}% vs its 50-day average"),
         "trend_200d": (trend > 0, f"{SYMBOL} {trend:+.2f}% vs its 200-day average"),

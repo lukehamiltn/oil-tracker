@@ -234,9 +234,10 @@ MATCH_TABLE = {
 }
 
 
-@st.cache_resource(show_spinner="Indexing past headlines...")
+@st.cache_resource(show_spinner="Indexing past headlines...", max_entries=1)
 def matcher(_archive: pd.DataFrame, version: str):
-    """Built once per archive version (it changes when new news is saved)."""
+    """Built once per archive version (it changes when new news is saved);
+    only the newest version is kept in memory."""
     return mn.build_matcher(_archive)
 
 
@@ -263,11 +264,14 @@ def like_this_before(prices, archive, heads) -> None:
     text = typed.strip() or picked
     if not text:
         return
+    # Only stories from at least two weeks before this one. Rounded to the
+    # hour so repeat searches reuse the saved answer.
     before = pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=14)
     if not typed.strip() and not heads.empty:
         row = heads[heads["headline"] == picked]
-        if len(row):   # only stories from at least two weeks before this one
+        if len(row):
             before = row["time"].iloc[0] - pd.Timedelta(days=14)
+    before = before.floor("h")
     version = f"{len(archive)}-{archive['time'].max()}"
     results, paths = past_matches(text, before, archive, prices, version)
     if results.empty:

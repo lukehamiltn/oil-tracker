@@ -1,10 +1,12 @@
 # Runs the paper-trading bot on GitHub's servers, weekdays near the 4pm ET close.
 #
 # Times are UTC. 4pm ET is 20:00 UTC in summer and 21:00 UTC in winter, so we
-# run at :20 and :40 past 19:00 and 20:00 UTC. The bot itself checks the market
-# clock and only trades in the last 45 minutes before the close; other runs
-# just log and exit. Running more than once a day is safe: it only trades when
-# the position needs to change, and never while an order is still open.
+# run every 15 minutes from 18:00 to 20:45 UTC. The bot itself checks the
+# market clock and only trades in the last 2 hours before the close; other
+# runs just log and exit. GitHub often starts scheduled runs late (we've seen
+# ~50 minutes), so the many runs and the wide window make sure at least one
+# lands before the close. Running more than once a day is safe: the bot only
+# trades when the position needs to change, and never while an order is open.
 #
 # The Alpaca keys come from the repository's secrets
 # (GitHub -> Settings -> Secrets and variables -> Actions).
@@ -13,7 +15,7 @@ name: Paper trading bot
 
 on:
   schedule:
-    - cron: "20,40 19,20 * * 1-5"
+    - cron: "*/15 18-20 * * 1-5"
   workflow_dispatch:   # adds a "Run workflow" button for manual runs
 
 jobs:

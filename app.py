@@ -9,7 +9,8 @@ its own file: news_page.py, bot_dashboard.py, conditions.py, lab_page.py,
 and the event pages below. Shared styling and chart pieces are in ui.py.
 """
 
-import pandas as pd
+from concurrent.futures import ThreadPoolExecutor
+
 import streamlit as st
 
 import backtest as bt
@@ -34,17 +35,24 @@ ui.apply_styles()
 # ---------------------------------------------------------------------------
 # Data - cached so the site doesn't redo the work on every click.
 # ttl = refresh at most every 6 hours (downloads fresh data each time).
+# cache_resource shares ONE copy between all visitors and clicks instead of
+# copying it every time (the pages only read this data, never change it).
 # ---------------------------------------------------------------------------
-@st.cache_data(ttl=6 * 60 * 60, show_spinner="Loading the latest oil data...")
+def _download(job) -> None:
+    # If a source is temporarily down, carry on with the copy we already
+    # have (if any) rather than crashing the site.
+    try:
+        job()
+    except Exception as error:
+        print(f"Download failed, using saved data instead: {error}")
+
+
+@st.cache_resource(ttl=6 * 60 * 60, show_spinner="Loading the latest oil data...")
 def get_data():
-    # Download fresh data. If a source is temporarily down, carry on with
-    # the copy we already have (if any) rather than crashing the site.
-    for download in (fetch_prices.main, inv.download_inventories, md.main,
-                     fed.download_fed):
-        try:
-            download()
-        except Exception as error:
-            print(f"Download failed, using saved data instead: {error}")
+    # The four downloads don't depend on each other, so run them at once
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        list(pool.map(_download, (fetch_prices.main, inv.download_inventories,
+                                  md.main, fed.download_fed)))
     prices = es.load_prices()
     inv_events = inv.build_events(inv.load_inventories())
     timelines = news.load_timelines()   # refreshed daily by a GitHub Action
@@ -125,9 +133,11 @@ with tab_lab:
     lab_page.render(data["features"], *data["backtests"], data["inv_events"])
 
 # ---------------------------------------------------------------------------
-# Scheduled events: EIA reports, OPEC+ meetings, Fed decisions
+# Scheduled events: EIA reports, OPEC+ meetings, Fed decisions.
+# A fragment: switching between them only redraws this tab, not the site.
 # ---------------------------------------------------------------------------
-with tab_events:
+@st.fragment
+def scheduled_events() -> None:
     ui.eyebrow("Scheduled events")
     st.subheader("How oil reacted to regular, scheduled market news", anchor=False)
     kind = st.segmented_control(
@@ -206,6 +216,10 @@ results largely reflect the economy that prompted the decision.
         })
         st.caption("Measured from the close two business days before the change took effect, "
                    "so the reaction is never missed. Meetings where rates were held aren't included.")
+
+
+with tab_events:
+    scheduled_events()
 
 # ---------------------------------------------------------------------------
 # News tab - filled in LAST, although it's the first tab. The page is built

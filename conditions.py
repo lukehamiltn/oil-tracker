@@ -62,7 +62,8 @@ def indicator_summary(table: pd.DataFrame) -> pd.DataFrame:
     rows = []
     for col, (label, _, _) in INDICATORS.items():
         values = table[col].dropna()
-        buckets = pd.qcut(values, 5, labels=BUCKETS)
+        # Rank first so tied values can't make two bucket edges identical
+        buckets = pd.qcut(values.rank(method="first"), 5, labels=BUCKETS)
         today_bucket = buckets.iloc[-1]
         same = history.loc[history.index.intersection(buckets[buckets == today_bucket].index)]
         rows.append({
