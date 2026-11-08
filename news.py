@@ -42,43 +42,50 @@ MIN_ARTICLES = 20        # ...with at least this many articles that day
 BASELINE_DAYS = 60       # "normal" = median share over the previous 60 days
 COOLDOWN_DAYS = 30       # a new spike needs 30 days of separation
 
-# Each topic: label, GDELT search query, headline keywords (regex), colour
+# Each topic: label, GDELT search query, headline keywords (regex), colour,
+# and an emoji dot of the same colour (menus can't show coloured text)
 TOPICS = {
     "shipping": {
         "label": "Attacks on tankers & shipping lanes",
         "query": '(tanker OR "Strait of Hormuz" OR "Red Sea" OR Houthi) (attack OR seized OR missile OR drone)',
         "keywords": r"tanker|hormuz|red sea|houthi|shipping lane|bab.el.mandeb",
         "color": "#2a78d6",
+        "dot": "🔵",   # matching emoji for menus
     },
     "infrastructure": {
         "label": "Attacks & outages at oil facilities",
         "query": '(refinery OR pipeline OR oilfield OR "oil facility" OR "oil facilities") (attack OR explosion OR drone OR outage OR fire)',
         "keywords": r"refiner|pipeline|oil ?field|oil facilit|terminal|abqaiq|outage",
         "color": "#eb6834",
+        "dot": "🟠",   # matching emoji for menus
     },
     "sanctions": {
         "label": "Oil sanctions & embargoes",
         "query": '(sanctions OR embargo OR "price cap") (oil OR crude)',
         "keywords": r"sanction|embargo|price cap",
         "color": "#1baf7a",
+        "dot": "🟢",   # matching emoji for menus
     },
     "opec": {
         "label": "OPEC+ supply decisions",
         "query": "OPEC (output OR production OR cut OR cuts OR quota)",
         "keywords": r"opec",  # GDELT queries can't contain "+", so "OPEC" covers OPEC+
         "color": "#eda100",
+        "dot": "🟡",   # matching emoji for menus
     },
     "middle_east": {
         "label": "Middle East conflict",
         "query": '(Iran OR Israel OR Iraq OR Saudi OR Yemen) (war OR strike OR airstrike OR missile) oil',
         "keywords": r"\biran|israel|iraq|saudi|yemen|gaza|lebanon|hezbollah",
-        "color": "#e87ba4",
+        "color": "#9c6b3c",
+        "dot": "🟤",   # matching emoji for menus
     },
     "hurricane": {
         "label": "Hurricanes hitting U.S. oil",
         "query": 'hurricane ("Gulf of Mexico" OR "Gulf Coast" OR refineries OR offshore) oil',
         "keywords": r"hurricane|tropical storm|gulf of mexico|gulf coast",
-        "color": "#008300",
+        "color": "#5f5e5a",
+        "dot": "⚫",   # matching emoji for menus
         "months": [6, 7, 8, 9, 10, 11],   # Atlantic hurricane season (Jun-Nov)
     },
     "demand": {
@@ -86,12 +93,14 @@ TOPICS = {
         "query": '(recession OR slowdown OR "demand outlook") ("oil demand" OR "crude demand")',
         "keywords": r"demand|recession|slowdown|china.*(import|economy)",
         "color": "#6250d6",
+        "dot": "🟣",   # matching emoji for menus
     },
     "spr": {
         "label": "Strategic reserve releases",
         "query": '("Strategic Petroleum Reserve" OR "emergency oil stocks" OR "IEA release")',
         "keywords": r"strategic petroleum reserve|\bspr\b|emergency (oil )?stock|iea release",
         "color": "#e34948",
+        "dot": "🔴",   # matching emoji for menus
     },
 }
 
