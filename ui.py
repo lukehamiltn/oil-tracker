@@ -85,14 +85,30 @@ def topic_picker(label: str, options: list, labels: dict, colors: dict, key: str
         picked = st.pills(label, options, format_func=labels.get, key=key,
                           default=default, label_visibility="collapsed")
     chosen = picked or default
-    row = right.container(horizontal=True, vertical_alignment="center", gap="small")
-    row.markdown(chip(labels[chosen], colors[chosen]) if chosen else
-                 f'<span style="color:#898781">{none_text}</span>', unsafe_allow_html=True)
     if clear_text and picked:
+        # The chosen chip is itself a button: hovering shows an X badge in its
+        # corner, and clicking it removes the choice.
+        c = colors[chosen]
+        css = f".st-key-{key}_clear button"
+        st.html(f"""<style>
+{css} {{ background:{c} !important; border:none !important; border-radius:999px !important;
+        padding:0.1rem 0.6rem !important; min-height:0 !important; position:relative;
+        overflow:visible !important; }}
+{css} p {{ color:#fff !important; font-size:0.72rem !important; font-weight:600 !important; }}
+{css}::after {{ content:"✕"; position:absolute; top:-7px; right:-7px; width:16px; height:16px;
+               border-radius:50%; background:#1d1d1b; color:#fff; font-size:9px;
+               line-height:16px; text-align:center; opacity:0; transition:opacity .15s; }}
+{css}:hover::after, {css}:focus-visible::after {{ opacity:1; }}
+.st-key-{key}_clear, .st-key-{key}_clear * {{ overflow:visible !important; }}
+</style>""")
+
         def clear() -> None:       # runs before the redraw, so the chips reset too
             st.session_state[key] = None
-        row.button(clear_text, icon=":material/close:", type="tertiary",
-                   key=f"{key}_clear", on_click=clear)
+        right.button(labels[chosen], key=f"{key}_clear", on_click=clear, help=clear_text)
+    else:
+        right.markdown(chip(labels[chosen], colors[chosen]) if chosen else
+                       f'<span style="color:#898781">{none_text}</span>',
+                       unsafe_allow_html=True)
     return chosen
 
 

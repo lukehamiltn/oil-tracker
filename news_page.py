@@ -201,7 +201,7 @@ def headlines_section(heads: pd.DataFrame, is_live: bool, archive: pd.DataFrame)
     that kind, going back through the archive if today was quiet."""
     topic = ui.topic_picker("Filter by topic", TOPIC_KEYS, LABELS, COLORS, key="headline_topic",
                             none_text="Showing all of today's news",
-                            clear_text="Show all of today's news")
+                            clear_text="Remove this filter")
     if topic:
         pool = pd.concat([heads, mn.oil_related(archive)], ignore_index=True)
         pool = pool.drop_duplicates("headline")
