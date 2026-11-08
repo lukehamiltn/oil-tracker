@@ -9,11 +9,14 @@ its own file: news_page.py, bot_dashboard.py, conditions.py, lab_page.py,
 and the event pages below. Shared styling and chart pieces are in ui.py.
 """
 
+import importlib
+import os
 from concurrent.futures import ThreadPoolExecutor
 
 import streamlit as st
 
 import backtest as bt
+import bot
 import bot_dashboard
 import conditions
 import event_study as es
@@ -30,7 +33,46 @@ import strategies as strat
 import ui
 
 st.set_page_config(page_title="Oil Tracker", page_icon="🛢️", layout="wide")
+
+
+# ---------------------------------------------------------------------------
+# Keep our own files in step after an update. Streamlit Cloud re-reads this
+# file on every visit but can keep OLD copies of the other files it already
+# loaded, so new app.py + old ui.py = crash. Reload them (dependencies first)
+# whenever any of them changed on disk, and once when the server starts.
+# ---------------------------------------------------------------------------
+OWN_MODULES = [es, inv, md, fed, fetch_prices, strat, bt, bot, news, mn, mk, ui,
+               conditions, lab_page, bot_dashboard, news_page]
+
+
+@st.cache_resource
+def _loaded_versions() -> dict:
+    return {}          # one per server process: {module name: file timestamp}
+
+
+def _reload_if_changed() -> None:
+    seen = _loaded_versions()
+    current = {m.__name__: os.path.getmtime(m.__file__) for m in OWN_MODULES}
+    if seen != current:
+        for module in OWN_MODULES:
+            importlib.reload(module)
+        seen.clear()
+        seen.update(current)
+
+
+_reload_if_changed()
 ui.apply_styles()
+
+
+def safe(render, *args) -> None:
+    """Draw one tab; if it ever fails, say so in that tab only, so the other
+    tabs still load (the details go to the server log)."""
+    try:
+        render(*args)
+    except Exception as error:
+        print(f"Tab failed: {render.__name__}: {error!r}")
+        st.error("This section hit a problem and couldn't load. The rest of the site "
+                 "works; please try refreshing in a minute.")
 
 
 # ---------------------------------------------------------------------------
@@ -131,13 +173,13 @@ tab_news, tab_bots, tab_cond, tab_lab, tab_events = st.tabs([
 ])
 
 with tab_bots:
-    bot_dashboard.render()
+    safe(bot_dashboard.render)
 
 with tab_cond:
-    conditions.render(data["features"])
+    safe(conditions.render, data["features"])
 
 with tab_lab:
-    lab_page.render(data["features"], *data["backtests"], data["inv_events"])
+    safe(lab_page.render, data["features"], *data["backtests"], data["inv_events"])
 
 # ---------------------------------------------------------------------------
 # Scheduled events: EIA reports, OPEC+ meetings, Fed decisions.
@@ -232,7 +274,7 @@ results largely reflect the economy that prompted the decision.
 
 
 with tab_events:
-    scheduled_events()
+    safe(scheduled_events)
 
 # ---------------------------------------------------------------------------
 # News tab - filled in LAST, although it's the first tab. The page is built
@@ -240,7 +282,7 @@ with tab_events:
 # hold up the other tabs.
 # ---------------------------------------------------------------------------
 with tab_news:
-    news_page.render(prices, data)
+    safe(news_page.render, prices, data)
 
 # ---------------------------------------------------------------------------
 # Footer
