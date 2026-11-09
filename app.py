@@ -22,6 +22,7 @@ import conditions
 import event_study as es
 import fed_events as fed
 import fetch_prices
+import history_page
 import inventory_events as inv
 import lab_page
 import market_data as md
@@ -42,7 +43,7 @@ st.set_page_config(page_title="Oil Tracker", page_icon="🛢️", layout="wide")
 # whenever any of them changed on disk, and once when the server starts.
 # ---------------------------------------------------------------------------
 OWN_MODULES = [es, inv, md, fed, fetch_prices, strat, bt, bot, news, mn, mk, ui,
-               conditions, lab_page, bot_dashboard, news_page]
+               conditions, lab_page, bot_dashboard, news_page, history_page]
 
 
 @st.cache_resource
@@ -106,16 +107,17 @@ def get_data():
     market_spikes = mn.add_headlines(news.all_spikes(market_timelines, "market"),
                                      archive, mn.topic_match)
     # Each set of events measured in every market: react[set][market] = (results, paths)
-    react = {name: mk.reactions(markets, events) for name, events in {
-        "opec": es.load_events(), "inventory": inv_events,
-        "fed": fed.build_events(fed.load_fed()), "news": gdelt_spikes,
-        "market_news": market_spikes}.items()}
+    events = {"opec": es.load_events(), "inventory": inv_events,
+              "fed": fed.build_events(fed.load_fed()), "news": gdelt_spikes,
+              "market_news": market_spikes}
+    react = {name: mk.reactions(markets, ev) for name, ev in events.items()}
     return {
         "prices": prices,
         "markets": markets,
         "typical": mk.typical_moves(markets),
         "sig": mk.Significance(markets),      # "is this real?" checks
         "react": react,
+        "events": events,                     # every event, incl. ones too recent to measure
         # Brent results, used throughout the site
         **{name: react[name]["BRENT"] for name in react},
         "inv_events": inv_events,
@@ -165,13 +167,17 @@ st.write("")
 # ---------------------------------------------------------------------------
 # Tabs
 # ---------------------------------------------------------------------------
-tab_news, tab_bots, tab_cond, tab_lab, tab_events = st.tabs([
+tab_news, tab_history, tab_bots, tab_cond, tab_lab, tab_events = st.tabs([
     ":material/newspaper: News → past",
+    ":material/timeline: Event history",
     ":material/smart_toy: Paper trading bots",
     ":material/thermostat: Market conditions",
     ":material/science: Strategy lab",
     ":material/event: Scheduled events",
 ])
+
+with tab_history:
+    safe(history_page.render, data)
 
 with tab_bots:
     safe(bot_dashboard.render)

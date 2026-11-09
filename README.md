@@ -69,6 +69,7 @@ are in `ui.py`; the site theme is in `.streamlit/config.toml`.
 | Tab | File | What it shows |
 |---|---|---|
 | News → past | `news_page.py`, `news.py`, `market_news.py` | Today's headlines by topic, past news spikes, Brent's reaction, custom search |
+| Event history | `history_page.py` | Every past event on one price chart; click one for its headlines and every market's reaction |
 | Paper trading bots | `bot_dashboard.py` | Both bots' value, positions, trades vs holding BNO |
 | Market conditions | `conditions.py` | Today's indicators vs history, and the most similar past days |
 | Strategy lab | `lab_page.py`, `backtest.py`, `strategies.py` | Backtests, 2007-2016 build vs 2017-now test |
