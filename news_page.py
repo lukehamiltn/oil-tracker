@@ -136,7 +136,8 @@ VIEWS = {
 def render(prices: pd.Series, data: dict) -> None:
     """The News tab, split into four views picked from a row of buttons, so
     each fits on a screen or two (a fragment: switching only redraws this tab)."""
-    view = st.segmented_control("Section", list(VIEWS), default="now", key="news_view",
+    st.session_state.setdefault("news_view", "now")    # (the jump button can change it)
+    view = st.segmented_control("Section", list(VIEWS), key="news_view",
                                 format_func=VIEWS.get, label_visibility="collapsed") or "now"
     st.write("")
     archive = data["archive"]
