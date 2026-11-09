@@ -1,0 +1,26 @@
+# Visits the live site every hour in a headless browser, so Streamlit Cloud
+# doesn't put it to sleep and its data stays loaded. Without this, the first
+# visitor after a quiet spell waits for the whole site to start up again.
+
+name: Keep the site awake
+
+on:
+  schedule:
+    - cron: "17 * * * *"     # every hour (GitHub may start it a little late)
+  workflow_dispatch:         # adds a "Run workflow" button
+
+permissions:
+  contents: read
+
+jobs:
+  visit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install playwright==1.55.0
+      - run: python -m playwright install --with-deps chromium
+      - run: python scripts/keep_awake.py

@@ -96,7 +96,7 @@ def _download(job) -> None:
         print(f"Download failed, using saved data instead: {error}")
 
 
-@st.cache_resource(ttl=6 * 60 * 60, show_spinner="Loading the latest oil data...")
+@st.cache_resource(ttl=6 * 60 * 60, show_spinner="Loading prices and news history (this takes a few seconds after a quiet spell)...")
 def get_data():
     # The four downloads don't depend on each other, so run them at once
     with ThreadPoolExecutor(max_workers=4) as pool:
@@ -134,16 +134,17 @@ def get_data():
     }
 
 
-data = get_data()
-prices = data["prices"]
-
 # ---------------------------------------------------------------------------
-# Header
+# Header - drawn BEFORE the data loads, so a visitor sees the site straight
+# away (with a short loading line under it) instead of a blank page.
 # ---------------------------------------------------------------------------
 left, right = st.columns([5, 1], vertical_alignment="center")
 left.markdown(ui.masthead(pd.Timestamp.now(tz="America/New_York")), unsafe_allow_html=True)
 if right.button("Methodology", width="stretch", key="method_top"):
     methodology.show()
+
+data = get_data()
+prices = data["prices"]
 
 st.write("")
 @st.cache_data(ttl=5 * 60, show_spinner=False)

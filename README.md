@@ -82,6 +82,10 @@ are in `ui.py`; the site theme is in `.streamlit/config.toml`.
 (own BNO while BNO is above its 200-day average). They run on
 weekdays in the 2 hours before the close via GitHub Actions (`.github/workflows/bot.yml`).
 
+The site itself is visited every hour by `.github/workflows/keep_awake.yml`
+(`scripts/keep_awake.py`), so Streamlit Cloud never puts it to sleep and
+real visitors don't wait for it to start up.
+
 Keys are never committed. They live in:
 - `.env` locally (`ALPACA_API_KEY=...`, `ALPACA_SECRET_KEY=...`)
 - GitHub: Settings → Secrets and variables → Actions (for the bots)
