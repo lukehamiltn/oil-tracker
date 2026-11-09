@@ -13,6 +13,7 @@ import importlib
 import os
 from concurrent.futures import ThreadPoolExecutor
 
+import pandas as pd
 import streamlit as st
 
 import backtest as bt
@@ -23,6 +24,7 @@ import event_study as es
 import fed_events as fed
 import fetch_prices
 import history_page
+import live_prices
 import inventory_events as inv
 import lab_page
 import market_data as md
@@ -43,7 +45,8 @@ st.set_page_config(page_title="Oil Tracker", page_icon="🛢️", layout="wide")
 # whenever any of them changed on disk, and once when the server starts.
 # ---------------------------------------------------------------------------
 OWN_MODULES = [es, inv, md, fed, fetch_prices, strat, bt, bot, news, mn, mk, ui,
-               conditions, lab_page, bot_dashboard, news_page, history_page]
+               conditions, lab_page, bot_dashboard, news_page, history_page,
+               live_prices]
 
 
 @st.cache_resource
@@ -144,26 +147,51 @@ left.markdown(
 about = right.popover("ℹ️ How this works", width="stretch")
 
 st.write("")
-heat, _ = news_page.current_heat(data)
-latest_date, latest_price = prices.index[-1], prices.iloc[-1]
-n_events = sum(len(data[k][0]) for k in ("opec", "inventory", "fed", "news"))
-week_change = (latest_price / prices.iloc[-6] - 1) * 100
-if heat.empty:
-    story = ("Biggest oil story now", "—", "news data loading", None)
-else:
-    top = heat.iloc[0]
-    note = (f"{top['heat']:.1f}× its normal news coverage" if top["heat"] >= 1.5
-            else f"quiet news day: top topic at {top['heat']:.1f}× normal")
-    story = ("Biggest oil story now", top["label"], note, None)
-ui.kpi_row([
-    ("Brent crude", f"${latest_price:.2f}",
-     f"{'▲' if week_change >= 0 else '▼'} {week_change:+.1f}% over 5 trading days",
-     "#1d8a5e" if week_change >= 0 else "#c43a39"),
-    story,
-    ("Past events analysed", f"{n_events:,}", "news spikes, OPEC+, EIA and Fed", None),
-    ("Price data through", f"{latest_date:%b %d, %Y}",
-     f"history back to {prices.index[0].year}", None),
-])
+@st.cache_data(ttl=5 * 60, show_spinner=False)
+def live_quote(market: str) -> dict | None:
+    return live_prices.quote(market)       # shared by all visitors, refreshed every 5 min
+
+
+def price_card(label: str, market: str) -> tuple:
+    """Live futures price if we can get it, else the latest daily spot price (dated)."""
+    q = live_quote(market)
+    if q is not None:
+        change = q["change_pct"]
+        arrow, color = ("▲", "#1d8a5e") if (change or 0) >= 0 else ("▼", "#c43a39")
+        t = q["time"]
+        clock = f"{t.hour % 12 or 12}:{t:%M} {'pm' if t.hour >= 12 else 'am'} ET"
+        today = pd.Timestamp.now(tz=t.tz).date() == t.date()
+        when = clock if today else f"{t:%b} {t.day}, {clock}"
+        note = (f"{arrow} {change:+.1f}% · {when}" if change is not None else when)
+        return (label, f"${q['price']:.2f}", note, color)
+    series = data["markets"][market]
+    return (label, f"${series.iloc[-1]:.2f}",
+            f"daily spot price, {series.index[-1]:%b %d} (live price unavailable)", None)
+
+
+@st.fragment(run_every=5 * 60)        # the price cards keep themselves up to date
+def header_cards() -> None:
+    heat, _ = news_page.current_heat(data)
+    n_events = sum(len(data[k][0]) for k in ("opec", "inventory", "fed", "news"))
+    if heat.empty:
+        story = ("Biggest oil story now", "—", "news data loading", None)
+    else:
+        top = heat.iloc[0]
+        note = (f"{top['heat']:.1f}× its normal news coverage" if top["heat"] >= 1.5
+                else f"quiet news day: top topic at {top['heat']:.1f}× normal")
+        story = ("Biggest oil story now", top["label"], note, None)
+    ui.kpi_row([
+        price_card("Brent crude", "BRENT"),
+        price_card("WTI crude", "WTI"),
+        story,
+        ("Past events analysed", f"{n_events:,}", "news spikes, OPEC+, EIA and Fed", None),
+    ])
+    st.caption(f"Prices: front-month futures, about 10 min delayed. Charts and research use "
+               f"official daily spot prices, published about a week late (latest "
+               f"{prices.index[-1]:%b %d}).")
+
+
+header_cards()
 st.write("")
 
 # ---------------------------------------------------------------------------
