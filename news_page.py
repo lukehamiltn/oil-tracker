@@ -75,13 +75,13 @@ def search_archive(query: str, _archive: pd.DataFrame, _markets: dict):
     return t, mk.reactions(_markets, spikes), recent
 
 
-def status(heat: float) -> tuple[str, str, str | None]:
-    """Label, colour and card background tint (None = plain card)."""
+def status(heat: float) -> tuple[str, str, str]:
+    """Label, colour and card background tint."""
     if heat >= news.SPIKE_RATIO:
         return "Spiking", "#e34948", "#fdf3f2"
     if heat >= 1.5:
         return "Elevated", "#d48f00", "#fdf8ec"
-    return "Normal", "#1baf7a", None
+    return "Normal", "#1baf7a", "#f5fbf8"
 
 
 def coverage_chart(t: pd.DataFrame, spikes: pd.DataFrame, color: str, key: str,
@@ -144,15 +144,15 @@ def render(prices: pd.Series, data: dict) -> None:
             past = results[results["topic"] == row["topic"]]
             label, color, tint = status(row["heat"])
             key = f"heat_card_{row['topic']}"
-            if tint:      # hot topics: coloured top edge and a warm background
-                card_css.append(f".st-key-{key} {{ background: {tint}; "
-                                f"box-shadow: inset 0 4px 0 {color}; }}")
+            # every card: a top edge and faint background in its status colour
+            card_css.append(f".st-key-{key} {{ background: {tint}; "
+                            f"box-shadow: inset 0 4px 0 {color}; }}")
             with cols[i % 4].container(border=True, height="stretch", key=key):
                 # Now: how loud is this story?
-                number_color = color if tint else "#1d1d1b"
+                number_color = "#1d1d1b" if label == "Normal" else color
                 st.markdown(
                     ui.status_line(label, color, pulse=label == "Spiking")
-                    + f"<div style='font-weight:600;margin:0.35rem 0 0.1rem'>{row['label']}</div>"
+                    + f"<div class='card-title'>{row['label']}</div>"
                     + f"<span class='heat-num' style='color:{number_color}'>{row['heat']:.1f}×</span>"
                     + " <span class='heat-unit'>normal coverage</span>"
                     + ui.heat_gauge(row["heat"], color),
