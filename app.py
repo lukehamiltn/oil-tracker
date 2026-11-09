@@ -25,6 +25,7 @@ import fed_events as fed
 import fetch_prices
 import history_page
 import live_prices
+import methodology
 import inventory_events as inv
 import lab_page
 import market_data as md
@@ -47,7 +48,7 @@ st.set_page_config(page_title="Oil Tracker · oil news and market history",
 # ---------------------------------------------------------------------------
 OWN_MODULES = [es, inv, md, fed, fetch_prices, strat, bt, bot, news, mn, mk, ui,
                conditions, lab_page, bot_dashboard, news_page, history_page,
-               live_prices]
+               live_prices, methodology]
 
 
 @st.cache_resource
@@ -141,8 +142,8 @@ prices = data["prices"]
 # ---------------------------------------------------------------------------
 left, right = st.columns([5, 1], vertical_alignment="center")
 left.markdown(ui.masthead(pd.Timestamp.now(tz="America/New_York")), unsafe_allow_html=True)
-# A popover opens instantly in the browser (no page re-run).
-about = right.popover("How this works", width="stretch")
+if right.button("Methodology", width="stretch", key="method_top"):
+    methodology.show()
 
 st.write("")
 @st.cache_data(ttl=5 * 60, show_spinner=False)
@@ -329,83 +330,6 @@ st.markdown(
     '<div>Data: GDELT Project (worldwide news) · Benzinga via Alpaca (market news) · '
     'U.S. EIA · FRED / Federal Reserve · CFTC · Yahoo Finance (live futures prices)</div></div>',
     unsafe_allow_html=True)
+if st.button("How the numbers are worked out →", type="tertiary", key="method_footer"):
+    methodology.show()
 
-# ---------------------------------------------------------------------------
-# "How this works" text, shown in the popover in the header
-# ---------------------------------------------------------------------------
-with about:
-    st.markdown(f"""
-### The idea
-Find today's oil news, match it to similar moments in the past, and show what the
-oil market did next.
-
-### News
-- **Two sources.** *Worldwide news* from the GDELT Project, which monitors news
-  everywhere (history since 2017), and *market news* from Benzinga via Alpaca:
-  financial news about oil funds and oil companies (history since 2015). The latest
-  headlines and the search box use the market news archive, which is saved with the
-  site, so searches are instant.
-- **Topics:** each topic (e.g. attacks on tankers) is a fixed news search. For every
-  day we measure the topic's share of *all* news, so growth in GDELT's coverage
-  doesn't distort comparisons.
-- **News spike:** a day when a topic got at least {news.SPIKE_RATIO:.0f}× its normal share
-  of coverage (normal = median of the previous {news.BASELINE_DAYS} days), with at least
-  {news.MIN_ARTICLES} articles, and among the topic's busiest 10% of days over the
-  previous year. Spikes must be {news.COOLDOWN_DAYS}+ days apart. Hurricane spikes only
-  count in hurricane season (June–November). Days when GDELT itself collected
-  unusually few articles are skipped.
-- **Timing:** we start from the close one business day *before* the spike, so the
-  reaction isn't missed if the story broke the evening before.
-- **Headlines** are tagged by keyword, so a few may land in the wrong topic. Each past
-  spike shows the main market-news headline from that day, when there was one.
-- **Like this before:** each story is turned into a list of word weights (TF-IDF),
-  where rare words such as place and company names count most, and compared with
-  every past oil story. Matches must be at least a week apart and from at least two
-  weeks before the story, so the same event isn't counted twice.
-- **Market news spikes** use the same rules with a lower article minimum, because that
-  feed has a few dozen oil stories a day rather than thousands.
-
-### Other data
-- **Prices:** daily spot prices from the U.S. EIA via FRED for Brent and WTI crude,
-  NY Harbor gasoline and heating oil, and Henry Hub natural gas; the Fed's broad
-  dollar index (FRED); and the XLE energy-stock fund (Alpaca, dividends included).
-- **Inventories:** EIA weekly U.S. crude stocks, reports since 2006.
-- **OPEC+ decisions:** a hand-verified list of major decisions since 1999.
-- **Fed rate decisions:** the Fed's target rate via FRED; each change since 1990.
-- **Positioning:** CFTC Commitments of Traders, "managed money" in NYMEX WTI.
-- **Dollar:** Federal Reserve broad U.S. dollar index, via FRED.
-- **Bots:** live prices and the paper account from Alpaca.
-
-### Method
-- **Starting point:** the closing price on the last trading day *before* each event.
-- **Several markets:** every event is measured the same way in each market. Markets
-  move by very different amounts (natural gas swings far more than the dollar), so
-  each is compared with its own typical move. Windows containing a zero or negative
-  price (WTI in April 2020) are left out of that market.
-- **Inventory surprise:** the week's change minus the average change for the same
-  week over the previous 5 years (analyst forecasts aren't freely available).
-- **Market conditions:** today's readings are compared with every day since 2007;
-  "most similar days" compares all six indicators at once.
-- **Backtests** only use data that was public at the time, charge {bt.COST_PCT:.2f}% per
-  trade, and were designed on 2007–2016 and tested on 2017–now.
-
-### Is this pattern real?
-Every average is checked against luck. If an event type has 20 past cases, we pick
-20 *random* days from the same market's history, thousands of times over, and see how
-often their average move is as far from normal as the events' average was.
-- **Strong pattern (●●):** random days do that less than 2% of the time.
-- **Possible pattern (●):** less than 10% of the time.
-- **Could be noise:** random days do it often, so the average may just be luck.
-- **Too few events:** fewer than {mk.MIN_EVENTS} cases; we don't judge.
-
-The site checks hundreds of averages, so a few "strong" labels will still be flukes
-(about 1 in 50 of the checks that are really noise). Treat a pattern as more
-convincing when it shows up across related markets (e.g. crude *and* gasoline).
-
-### Limits - please read
-- **Markets react to surprises.** Expected news may barely move prices.
-- **Small samples.** Some categories have only a handful of events; one extreme case
-  (e.g. March 2020) can dominate an average.
-- **Other news happens at the same time.** Moves aren't caused only by the event.
-- Past reactions don't guarantee future ones. **Not investment advice.**
-""")

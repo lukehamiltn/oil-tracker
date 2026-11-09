@@ -372,7 +372,7 @@ def comparison_section(prices, results, paths, cat_col, categories, labels, colo
     st.dataframe(summary, width="stretch", key=f"{key}_summary", column_config={
         "pattern": st.column_config.TextColumn(
             "Pattern?", help="Could random days have produced an average this big? "
-                             "See 'How this works'."),
+                             "See Methodology (top of the page)."),
         "events": st.column_config.NumberColumn("Events"),
         "average": st.column_config.NumberColumn("Average", format=PCT),
         "pct_up": st.column_config.NumberColumn("Times price rose", format="%.0f%%"),
