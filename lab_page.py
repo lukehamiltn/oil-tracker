@@ -6,12 +6,14 @@ import streamlit as st
 
 import backtest as bt
 import inventory_events as inv
+import news
 import strategies as strat
 import ui
 
 STRATEGY_COLORS = {"buy_and_hold": "#898781", "trend_200d": "#2a78d6",
                    "big_build_rebound": "#eb6834", "tight_inventories": "#1baf7a",
-                   "crowded_short": "#eda100", "weak_dollar": "#e87ba4"}
+                   "crowded_short": "#eda100", "weak_dollar": "#e87ba4",
+                   "supply_news": "#6250d6"}
 
 
 def render(features, bt_results, bt_metrics, inv_events) -> None:
@@ -32,10 +34,11 @@ never saw. A rule that only works in the first period was probably luck.
         "crowded_short": f"Hedge-fund positioning at {today['mm_positioning_rank']:.0%} "
                          "of its 3-year range",
         "weak_dollar": f"Dollar {today['dollar_vs_50d_pct']:+.1f}% vs its 50-day avg",
+        "supply_news": last_supply_spike(features),
     }
     ui.kpi_row([(strat.STRATEGIES[key][0],
                  "Own oil" if bt_results[key]["position"].iloc[-1] > 0 else "Cash",
-                 reading, None) for key, reading in readings.items()], columns=len(readings))
+                 reading, None) for key, reading in readings.items()], columns=3)
 
     st.write("")
     st.markdown("**Growth of $10,000**")
@@ -59,11 +62,22 @@ never saw. A rule that only works in the first period was probably luck.
     results_table(bt_metrics)
 
 
+def last_supply_spike(features) -> str:
+    spikes = features["supply_news"].dropna()
+    if spikes.empty:
+        return "No supply-threat news spikes yet"
+    day, topic = spikes.index[-1], spikes.iloc[-1]
+    return f"Last spike: {news.TOPICS[topic]['label'].lower()}, {day:%b %d, %Y}"
+
+
 @st.fragment
 def results_table(bt_metrics) -> None:
     period = st.segmented_control("Period", ["Test 2017-now", "Build 2007-2016"],
                                   default="Test 2017-now", key="lab_period") or "Test 2017-now"
-    table = bt_metrics[bt_metrics["period"] == period].set_index("label")[
+    shown = bt_metrics[bt_metrics["period"] == period]
+    # The news rule has no 2007-2016 history (news data starts in 2017)
+    shown = shown[~((shown["strategy"] == "supply_news") & (shown["trades"] == 0))]
+    table = shown.set_index("label")[
         ["annual_return_pct", "annual_volatility_pct", "sharpe", "max_drawdown_pct",
          "time_in_market_pct", "trades"]]
     st.dataframe(table, width="stretch", key="lab_table", column_config={
@@ -77,4 +91,8 @@ def results_table(bt_metrics) -> None:
         "time_in_market_pct": st.column_config.NumberColumn("Time owning oil", format="%.0f%%"),
         "trades": st.column_config.NumberColumn("Trades"),
     })
-    st.caption("Compare each rule with buy-and-hold over the same period.")
+    st.caption("Compare each rule with buy-and-hold over the same period. "
+               "**Supply-scare news** only has 2017-now: the news history starts in 2017, so "
+               "its rule (buy the day after a news spike about tanker or facility attacks, "
+               "Middle East conflict or sanctions, and hold for a week) was never fitted to "
+               "any results.")

@@ -8,6 +8,8 @@ to the day it became available:
   - CFTC positioning: as of Tuesday, released Friday 3:30pm ET (after oil
     futures close) -> usable from the following Monday's close
   - Dollar index: published weekly by the Fed -> treated as usable 7 days later
+  - News spikes (GDELT): a day's coverage is complete at midnight UTC (7pm ET,
+    after the close) -> usable from the NEXT trading day's close
 
 Every strategy returns a "position" for each day: 1 = own oil, 0 = in cash.
 The position chosen at a day's close earns the NEXT day's price change.
@@ -21,6 +23,11 @@ import pandas as pd
 import event_study as es
 import inventory_events as inv
 import market_data as md
+import news
+
+# News topics that threaten oil SUPPLY, where the textbook reaction is a price
+# rise. Chosen on that reasoning, not by picking the best past results.
+SUPPLY_TOPICS = ["shipping", "infrastructure", "middle_east", "sanctions"]
 
 
 def _as_of(values: pd.Series, known_from: pd.DatetimeIndex,
@@ -87,6 +94,20 @@ def build_features(prices: pd.Series | None = None) -> pd.DataFrame:
 
     # --- Dollar ------------------------------------------------------------
     f["dollar_vs_50d_pct"] = dollar_trend(md.load_dollar(), days)
+
+    # --- News spikes about supply threats (GDELT, from 2017) -----------------
+    f["supply_news"] = None
+    spikes = news.all_spikes(news.load_timelines())
+    spikes = spikes[spikes["topic"].isin(SUPPLY_TOPICS)]
+    if len(spikes):
+        # first trading day strictly AFTER the spike day (its coverage is only
+        # complete after that day's close)
+        usable = days.searchsorted(spikes["spike_day"], side="right")
+        ok = usable < len(days)
+        topic = pd.Series(spikes["topic"].values[ok], index=days[usable[ok]])
+        topic = topic[~topic.index.duplicated(keep="last")]
+        f["supply_news"] = topic.reindex(days)
+    f.attrs["news_start"] = news.load_timelines()["date"].min()
     return f
 
 
@@ -130,6 +151,17 @@ def weak_dollar(f: pd.DataFrame) -> pd.Series:
     return (d < 0).astype(float).where(d.notna())
 
 
+def supply_news(f: pd.DataFrame, hold_days: int = 5) -> pd.Series:
+    """After a news spike about a supply threat (tanker or facility attacks,
+    Middle East conflict, sanctions), buy at the next close and hold for a
+    week (5 trading days). News history starts in 2017, so this rule has no
+    'build' period: everything it shows is out-of-sample."""
+    signal = f["supply_news"].notna().astype(float)
+    position = signal.rolling(hold_days, min_periods=1).max()
+    start = f.attrs.get("news_start")
+    return position.where(f.index >= start) if start is not None else position
+
+
 STRATEGIES = {
     "buy_and_hold": ("Buy and hold (benchmark)", buy_and_hold),
     "trend_200d": ("Trend: above 200-day average", trend_200d),
@@ -137,4 +169,5 @@ STRATEGIES = {
     "tight_inventories": ("Inventories below normal", tight_inventories),
     "crowded_short": ("Hedge funds crowded short", crowded_short),
     "weak_dollar": ("Weak dollar", weak_dollar),
+    "supply_news": ("Supply-scare news", supply_news),
 }

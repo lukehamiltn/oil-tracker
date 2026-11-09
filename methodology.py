@@ -80,6 +80,10 @@ two business days before the change took effect.
 
 **Strategy lab** backtests only use information that was public at the time, charge
 {bt.COST_PCT:.2f}% per trade, and were designed on 2007–2016, then tested on 2017 onwards.
+The *supply-scare news* rule buys at the close the day **after** a news spike about tanker
+or facility attacks, Middle East conflict or sanctions (a day's news count is only complete
+after the market has closed) and holds for a week. News history starts in 2017, so it has
+no design period at all.
 
 **Trading bots** trade fake money in an Alpaca paper account at real prices, checking
 once each weekday in the two hours before the 4pm ET close.
