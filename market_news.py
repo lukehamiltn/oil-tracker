@@ -227,8 +227,8 @@ def add_headlines(spikes: pd.DataFrame, archive: pd.DataFrame,
 def topic_match(window: pd.DataFrame, spike) -> pd.Series:
     """Stories tagged with the spike's topic, or whose summary mentions it."""
     tagged = window["topics"].map(lambda ts: spike["topic"] in ts)
-    return tagged | window["text"].str.contains(news.TOPICS[spike["topic"]]["keywords"],
-                                                regex=True)
+    words = re.sub(r"\((?!\?)", "(?:", news.TOPICS[spike["topic"]]["keywords"])  # no capture groups
+    return tagged | window["text"].str.contains(words, regex=True)
 
 
 # ---------------------------------------------------------------------------
