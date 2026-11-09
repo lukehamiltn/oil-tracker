@@ -294,6 +294,14 @@ def past_matches(text: str, before: pd.Timestamp, _archive: pd.DataFrame,
     return mk.reactions(_markets, found)
 
 
+def _plain(text: str) -> str:
+    """Show text exactly as written (radio labels are read as Markdown, where
+    $ * _ and friends would change the formatting)."""
+    for ch in "\\`*_{}[]()#+-.!$~|<>":      # backslash first, so it isn't doubled
+        text = text.replace(ch, "\\" + ch)
+    return text
+
+
 @st.fragment
 def like_this_before(data, archive, heads) -> None:
     st.caption("Pick one of today's headlines, or type your own. We find the past stories "
@@ -302,11 +310,23 @@ def like_this_before(data, archive, heads) -> None:
     # Round-up headlines ("Benzinga Market Summary: ...") only match other
     # round-ups, so put a specific story first
     options = sorted(options, key=lambda h: "market summary" in h.lower())
-    c1, c2 = st.columns([3, 2], vertical_alignment="bottom")
-    picked = c1.selectbox("Today's headline", options, index=0 if options else None,
-                          placeholder="No headlines right now", key="like_pick")
-    typed = c2.text_input("Or type a headline", key="like_typed",
-                          placeholder="e.g. Drone attack hits Saudi oil facility")
+    c1, c2 = st.columns([3, 2])
+    # A scrollable list rather than a dropdown, so every headline shows in full
+    with c1:
+        st.markdown("**Today's headlines**")
+        if options:
+            with st.container(height=230, key="like_list"):
+                picked = st.radio("Today's headline", options, index=0, key="like_pick",
+                                  format_func=_plain, label_visibility="collapsed")
+        else:
+            picked = None
+            st.caption("No headlines right now.")
+    with c2:
+        st.markdown("**Or type a headline**")
+        typed = st.text_input("Or type a headline", key="like_typed",
+                              placeholder="e.g. Drone attack hits Saudi oil facility",
+                              label_visibility="collapsed")
+        st.caption("Typing here overrides the picked headline. Clear it to go back to the list.")
     text = typed.strip() or picked
     if not text:
         return

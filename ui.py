@@ -54,6 +54,10 @@ CSS = """
 .kpi-value { font-size: 1.55rem; font-weight: 700; letter-spacing: -0.02em; color: #1d1d1b;
              line-height: 1.25; margin: 0.2rem 0 0.3rem; }
 .kpi-note { font-size: 0.8rem; font-weight: 500; }
+/* "Like this before" headline list: one headline per row, a line between rows */
+.st-key-like_list [role="radiogroup"] label { padding: 0.35rem 0; border-bottom: 1px solid #ecebe6;
+    width: 100%; align-items: flex-start; }
+.st-key-like_list [role="radiogroup"] { gap: 0 !important; }
 .footer { color: #898781; font-size: 0.8rem; margin-top: 3rem; padding-top: 1rem;
           border-top: 1px solid #ecebe6; }
 </style>
