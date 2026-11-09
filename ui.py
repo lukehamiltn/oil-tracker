@@ -62,6 +62,18 @@ h3 { letter-spacing: -0.005em; }
 /* Header cards */
 .kpi-row { display: grid; grid-template-columns: repeat(var(--cols, 4), 1fr); gap: 1rem; margin-bottom: 0.5rem; }
 @media (max-width: 800px) { .kpi-row { grid-template-columns: repeat(2, 1fr); } }
+/* Phones */
+.masthead svg { flex-shrink: 0; }
+@media (max-width: 640px) {
+  .masthead { align-items: flex-start; }
+  .masthead .wordmark { font-size: 1.6rem; }
+  .masthead .dek { font-size: 0.85rem; }
+  /* rows of buttons wrap instead of running off the screen */
+  [data-testid="stButtonGroup"] > div { flex-wrap: wrap !important; }
+  /* topic cards: no reserved second line when a title fits on one */
+  .card-title { height: auto !important; -webkit-line-clamp: unset; }
+  .past { min-height: 0 !important; }
+}
 .kpi { border: 1px solid #e1e0d9; border-radius: 0.5rem; padding: 0.9rem 1rem; background: #ffffff; }
 .kpi-label { font-size: 0.85rem; color: #52514e; }
 .kpi-value { font-size: 1.55rem; font-weight: 700; letter-spacing: -0.02em; color: #1d1d1b;
@@ -286,7 +298,7 @@ def style_event_chart(fig: go.Figure, y_title: str, height: int = 400) -> go.Fig
                   annotation_text="close before the news", annotation_position="bottom right",
                   annotation_font_size=11, annotation_font_color=MUTED)
     return base_layout(fig, height, hovermode="x unified",
-                       xaxis_title="Trading days from the close before the news",
+                       xaxis_title="Trading days after the news",
                        yaxis_title=y_title, yaxis_ticksuffix="%")
 
 
