@@ -75,12 +75,13 @@ def search_archive(query: str, _archive: pd.DataFrame, _markets: dict):
     return t, mk.reactions(_markets, spikes), recent
 
 
-def status(heat: float) -> tuple[str, str]:
+def status(heat: float) -> tuple[str, str, str | None]:
+    """Label, colour and card background tint (None = plain card)."""
     if heat >= news.SPIKE_RATIO:
-        return "Spiking", "#e34948"
+        return "Spiking", "#e34948", "#fdf3f2"
     if heat >= 1.5:
-        return "Elevated", "#eda100"
-    return "Normal", "#1baf7a"
+        return "Elevated", "#d48f00", "#fdf8ec"
+    return "Normal", "#1baf7a", None
 
 
 def coverage_chart(t: pd.DataFrame, spikes: pd.DataFrame, color: str, key: str,
@@ -136,25 +137,41 @@ def render(prices: pd.Series, data: dict) -> None:
                    f"{SOURCE_NAMES[heat_source].split(' (')[0].lower()} (data to "
                    f"{heat['last_day'].max():%b %d, %Y}). For each topic: what Brent did "
                    "in the week after past news spikes.")
-        cols = st.columns(4)
+        card_css = []
         for i, (_, row) in enumerate(heat.iterrows()):
+            if i % 4 == 0:        # a fresh row of columns, so cards in a row match heights
+                cols = st.columns(4)
             past = results[results["topic"] == row["topic"]]
-            label, color = status(row["heat"])
-            with cols[i % 4].container(border=True, height="stretch"):
-                st.markdown(ui.chip(label, color), unsafe_allow_html=True)
-                st.markdown(f"**{row['label']}**")
-                st.markdown(f"<span style='font-size:1.5rem;font-weight:600'>{row['heat']:.1f}×</span>"
-                            f" <span style='color:#898781'>normal coverage</span>",
-                            unsafe_allow_html=True)
+            label, color, tint = status(row["heat"])
+            key = f"heat_card_{row['topic']}"
+            if tint:      # hot topics: coloured top edge and a warm background
+                card_css.append(f".st-key-{key} {{ background: {tint}; "
+                                f"box-shadow: inset 0 4px 0 {color}; }}")
+            with cols[i % 4].container(border=True, height="stretch", key=key):
+                # Now: how loud is this story?
+                number_color = color if tint else "#1d1d1b"
+                st.markdown(
+                    ui.status_line(label, color, pulse=label == "Spiking")
+                    + f"<div style='font-weight:600;margin:0.35rem 0 0.1rem'>{row['label']}</div>"
+                    + f"<span class='heat-num' style='color:{number_color}'>{row['heat']:.1f}×</span>"
+                    + " <span class='heat-unit'>normal coverage</span>"
+                    + ui.heat_gauge(row["heat"], color),
+                    unsafe_allow_html=True)
+                # History: what happened after past spikes, and is it real?
                 if len(past):
                     week = past["day_5_pct"]
-                    st.caption(f"After {len(past)} past spikes, Brent averaged "
-                               f"**{week.mean():+.1f}%** over the next week and rose "
-                               f"{(week > 0).mean():.0%} of the time.")
-                    text, tone = mk.VERDICTS[data["sig"].check("BRENT", 5, week)]
-                    st.markdown(ui.chip(text, tone), unsafe_allow_html=True)
+                    verdict = data["sig"].check("BRENT", 5, week)
+                    shade = ui.MUTED if verdict in ("noise", "few") else "#1d1d1b"
+                    st.markdown(
+                        "<div class='card-rule'></div>"
+                        f"<div class='eyebrow' style='margin-top:0.4rem'>After {len(past)} past spikes</div>"
+                        f"<div class='past'>Brent <b style='color:{shade}'>{week.mean():+.1f}%</b> "
+                        f"the next week · rose {(week > 0).mean():.0%} of the time</div>"
+                        + ui.verdict_badge(verdict),
+                        unsafe_allow_html=True)
                 else:
                     st.caption("No past spikes to compare with yet.")
+        st.html(ui.CARD_CSS.replace("</style>", "\n".join(card_css) + "\n</style>"))
         st.write("")
 
     # ---- 2. Latest headlines ---------------------------------------------------

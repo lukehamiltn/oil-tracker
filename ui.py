@@ -62,6 +62,63 @@ def chip(text: str, color: str) -> str:
     return f'<span class="chip" style="background:{color}">{text}</span>'
 
 
+# ---- Topic cards: "how loud is it now" vs "does history say it matters" ----
+# The two answers get different looks on purpose: coverage is shown as a
+# temperature (coloured card edge, dot, number and gauge), the pattern check
+# as an outlined badge with signal-strength bars.
+
+CARD_CSS = """
+<style>
+.status { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+          display: flex; align-items: center; gap: 0.4rem; }
+.status .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.status .dot.pulse { animation: pulse 1.6s ease-out infinite; }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(227,73,72,0.55); }
+                   100% { box-shadow: 0 0 0 7px rgba(227,73,72,0); } }
+.heat-num { font-size: 1.6rem; font-weight: 700; letter-spacing: -0.02em; }
+.heat-unit { color: #898781; font-size: 0.85rem; }
+.meter { position: relative; height: 6px; background: #ecebe6; border-radius: 3px; margin: 0.3rem 0 0.15rem; }
+.meter .fill { height: 100%; border-radius: 3px; }
+.meter .tick { position: absolute; top: -3px; width: 2px; height: 12px; background: #52514e; border-radius: 1px; }
+.meter-label { font-size: 0.68rem; color: #898781; position: relative; height: 0.9rem; }
+.card-rule { border-top: 1px dashed #e1e0d9; margin: 0.2rem 0 0.1rem; }
+.past { font-size: 0.85rem; color: #52514e; line-height: 1.45; }
+.past b { font-size: 1.05rem; }
+.verdict { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.74rem; font-weight: 600;
+           padding: 0.12rem 0.55rem 0.12rem 0.45rem; border: 1.5px solid; border-radius: 6px;
+           background: #ffffff; margin-top: 0.35rem; }
+</style>
+"""
+
+VERDICT_BARS = {"strong": 3, "possible": 2, "noise": 1, "few": 0}
+
+
+def status_line(label: str, color: str, pulse: bool = False) -> str:
+    dot = f'<span class="dot{" pulse" if pulse else ""}" style="background:{color}"></span>'
+    return f'<div class="status" style="color:{color}">{dot}{label}</div>'
+
+
+def heat_gauge(heat: float, color: str, top: float = 3.0) -> str:
+    """A bar filled up to today's coverage, with a tick where 'normal' (1×) is."""
+    fill, tick = min(heat / top, 1) * 100, 100 / top
+    return (f'<div class="meter"><div class="fill" style="width:{max(fill, 2):.0f}%;'
+            f'background:{color}"></div><span class="tick" style="left:{tick:.1f}%"></span></div>'
+            f'<div class="meter-label"><span style="position:absolute;left:{tick:.1f}%;'
+            f'transform:translateX(-50%)">normal</span>'
+            f'<span style="position:absolute;right:0">{top:.0f}×+</span></div>')
+
+
+def verdict_badge(verdict: str) -> str:
+    """Outlined badge with 0–3 signal bars: how sure we are the pattern is real."""
+    text, color = mk.VERDICTS[verdict]
+    level = VERDICT_BARS[verdict]
+    bars = "".join(
+        f'<rect x="{i * 5}" y="{8 - 3 * i}" width="3.5" height="{4 + 3 * i}" rx="1" '
+        f'fill="{color if i < level else "#d6d4cc"}"/>' for i in range(3))
+    return (f'<span class="verdict" style="color:{color};border-color:{color}">'
+            f'<svg width="14" height="12" viewBox="0 0 14 12">{bars}</svg>{text}</span>')
+
+
 def topic_picker(label: str, options: list, labels: dict, colors: dict, key: str,
                  default=None, none_text: str = "",
                  clear_text: str | None = None) -> str | None:
