@@ -192,7 +192,7 @@ def path_chart(data: dict, event, market: str) -> None:
                                hovertemplate="Day %{x}: %{y:+.1f}%<extra></extra>"))
     ui.style_event_chart(fig, f"% change in {short}", 300)
     fig.update_layout(hovermode="closest")
-    st.plotly_chart(fig, width="stretch", key="history_path")
+    st.plotly_chart(fig, width="stretch", config=ui.CHART_CONFIG, key="history_path")
 
 
 def similar_summary(data: dict, event, market: str) -> None:
@@ -275,7 +275,7 @@ def render(data: dict) -> None:
     fig, plotted = timeline_chart(data["markets"][market], events, market, event)
     st.plotly_chart(fig, width="stretch", key="history_chart", on_select="rerun",
                     selection_mode="points",
-                    config={"scrollZoom": False, "displayModeBar": False})
+                    config=ui.CHART_CONFIG)
 
     # ---- The chosen event ---------------------------------------------------
     st.write("")

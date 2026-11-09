@@ -199,19 +199,25 @@ def search_mask(archive: pd.DataFrame, query: str) -> pd.Series:
 
 def add_headlines(spikes: pd.DataFrame, archive: pd.DataFrame,
                   match_for: callable) -> pd.DataFrame:
-    """Attach the main headline from each spike day (or the day before), so
-    every past spike shows what the news actually said."""
+    """Attach a headline from around each spike, so every past spike shows
+    what the news actually said. Looks on the spike day first, then the day
+    before, the day after and two days before (the archive holds only ~10
+    oil-market stories a day, so the spike day alone often has none)."""
     if spikes.empty or archive.empty:
         return spikes.assign(headline="")
     by_day = {day: rows for day, rows in archive.groupby("day")}
-    empty = archive.iloc[0:0]
     found = []
     for _, spike in spikes.iterrows():
-        day = spike["spike_day"]
-        window = pd.concat([by_day.get(day - pd.Timedelta(days=1), empty),
-                            by_day.get(day, empty)])
-        hits = window[match_for(window, spike)] if len(window) else window
-        found.append(hits["headline"].iloc[-1] if len(hits) else "")
+        headline = ""
+        for offset in (0, -1, 1, -2):
+            window = by_day.get(spike["spike_day"] + pd.Timedelta(days=offset))
+            if window is None:
+                continue
+            hits = window[match_for(window, spike)]
+            if len(hits):
+                headline = hits["headline"].iloc[-1]
+                break
+        found.append(headline)
     spikes = spikes.assign(headline=found)
     spikes["description"] = [f"{h}<br>{d}" if h else d
                              for h, d in zip(spikes["headline"], spikes["description"])]
@@ -219,7 +225,10 @@ def add_headlines(spikes: pd.DataFrame, archive: pd.DataFrame,
 
 
 def topic_match(window: pd.DataFrame, spike) -> pd.Series:
-    return window["topics"].map(lambda ts: spike["topic"] in ts)
+    """Stories tagged with the spike's topic, or whose summary mentions it."""
+    tagged = window["topics"].map(lambda ts: spike["topic"] in ts)
+    return tagged | window["text"].str.contains(news.TOPICS[spike["topic"]]["keywords"],
+                                                regex=True)
 
 
 # ---------------------------------------------------------------------------

@@ -147,21 +147,23 @@ st.write("")
 heat, _ = news_page.current_heat(data)
 latest_date, latest_price = prices.index[-1], prices.iloc[-1]
 n_events = sum(len(data[k][0]) for k in ("opec", "inventory", "fed", "news"))
-k1, k2, k3, k4 = st.columns(4)
-k1.metric("Brent crude", f"${latest_price:.2f}",
-          f"{(latest_price / prices.iloc[-6] - 1) * 100:+.1f}% over 5 trading days",
-          border=True)
+week_change = (latest_price / prices.iloc[-6] - 1) * 100
 if heat.empty:
-    k2.metric("Biggest oil story now", "—", "news data loading", delta_color="off", border=True)
+    story = ("Biggest oil story now", "—", "news data loading", None)
 else:
     top = heat.iloc[0]
     note = (f"{top['heat']:.1f}× its normal news coverage" if top["heat"] >= 1.5
             else f"quiet news day: top topic at {top['heat']:.1f}× normal")
-    k2.metric("Biggest oil story now", top["label"], note, delta_color="off", border=True)
-k3.metric("Past events analysed", f"{n_events:,}",
-          "news spikes, OPEC+, EIA and Fed", delta_color="off", border=True)
-k4.metric("Price data through", f"{latest_date:%b %d, %Y}",
-          f"history back to {prices.index[0].year}", delta_color="off", border=True)
+    story = ("Biggest oil story now", top["label"], note, None)
+ui.kpi_row([
+    ("Brent crude", f"${latest_price:.2f}",
+     f"{'▲' if week_change >= 0 else '▼'} {week_change:+.1f}% over 5 trading days",
+     "#1d8a5e" if week_change >= 0 else "#c43a39"),
+    story,
+    ("Past events analysed", f"{n_events:,}", "news spikes, OPEC+, EIA and Fed", None),
+    ("Price data through", f"{latest_date:%b %d, %Y}",
+     f"history back to {prices.index[0].year}", None),
+])
 st.write("")
 
 # ---------------------------------------------------------------------------

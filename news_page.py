@@ -30,7 +30,7 @@ EXAMPLES = ['"Strait of Hormuz"', "Houthi", "refinery fire", "Abqaiq", "Libya",
 
 SPIKE_TABLE = {
     "spike_day": st.column_config.DateColumn("News spike", format="YYYY-MM-DD"),
-    "headline": st.column_config.TextColumn("Main headline that day", width="large"),
+    "headline": st.column_config.TextColumn("Headline around then", width="large"),
     "ratio": st.column_config.NumberColumn("Coverage vs normal", format="%.1fx"),
     "articles": st.column_config.NumberColumn("Articles", format="%d"),
     **ui.HORIZON_COLUMNS,
@@ -107,7 +107,7 @@ def coverage_chart(t: pd.DataFrame, spikes: pd.DataFrame, color: str, key: str,
             customdata=spikes[["description"]].values,
             hovertemplate="<b>%{x|%b %d, %Y}</b><br>%{customdata[0]}<extra></extra>"))
     ui.base_layout(fig, 300, hovermode="closest", yaxis_title=title)
-    st.plotly_chart(fig, width="stretch", key=key)
+    st.plotly_chart(fig, width="stretch", config=ui.CHART_CONFIG, key=key)
 
 
 def headline_list(heads: pd.DataFrame) -> None:
@@ -124,8 +124,58 @@ def headline_list(heads: pd.DataFrame) -> None:
     st.markdown("".join(rows), unsafe_allow_html=True)
 
 
+VIEWS = {
+    "now": ":material/bolt: Now",
+    "like": ":material/history: Like this before",
+    "topics": ":material/category: Topics",
+    "search": ":material/search: Search the past",
+}
+
+
+@st.fragment
 def render(prices: pd.Series, data: dict) -> None:
-    timelines, archive = data["timelines"], data["archive"]
+    """The News tab, split into four views picked from a row of buttons, so
+    each fits on a screen or two (a fragment: switching only redraws this tab)."""
+    view = st.segmented_control("Section", list(VIEWS), default="now", key="news_view",
+                                format_func=VIEWS.get, label_visibility="collapsed") or "now"
+    st.write("")
+    archive = data["archive"]
+    if view == "now":
+        now_view(data)
+    elif view == "like":
+        if archive.empty:
+            st.info("The news archive isn't available right now. Please try again later.")
+            return
+        ui.eyebrow("Like this before")
+        st.subheader("Has a story like this happened before?", anchor=False)
+        like_this_before(data, archive, todays_headlines(archive).head(15))
+    elif view == "topics":
+        ui.eyebrow("Explore a topic")
+        st.subheader("Past news spikes and how oil reacted", anchor=False)
+        explore_topic(prices, data)
+        news_results = data["news"][0]
+        if not news_results.empty:
+            st.divider()
+            ui.eyebrow("All topics")
+            st.subheader("Average market move after a news spike, by topic", anchor=False)
+            all_topics(data, [k for k in TOPIC_KEYS if k in set(news_results["topic"])])
+    else:
+        ui.eyebrow("Search the past")
+        st.subheader("Look up any news theme", anchor=False)
+        search_section(data, archive)
+
+
+def todays_headlines(archive: pd.DataFrame) -> pd.DataFrame:
+    """Today's headlines, topic-tagged stories first, then newest first."""
+    heads, _ = latest_headlines(archive) if not archive.empty else (pd.DataFrame(), False)
+    if heads.empty:
+        return heads
+    return heads.assign(tagged=heads["topics"].str.len() > 0).sort_values(
+        ["tagged", "time"], ascending=[False, False])
+
+
+def now_view(data: dict) -> None:
+    archive = data["archive"]
     heat, heat_source = current_heat(data)
     results = data["news"][0] if heat_source == "gdelt" else data["market_news"][0]
 
@@ -180,38 +230,10 @@ def render(prices: pd.Series, data: dict) -> None:
     # ---- 2. Latest headlines ---------------------------------------------------
     ui.eyebrow("Latest headlines")
     st.subheader("Today's oil news", anchor=False)
-    heads, is_live = latest_headlines(archive) if not archive.empty else (pd.DataFrame(), False)
-    if not heads.empty:
-        heads = heads.assign(tagged=heads["topics"].str.len() > 0).sort_values(
-            ["tagged", "time"], ascending=[False, False])
-    headlines_section(heads, is_live, archive)
-
-    # ---- 3. Like this before -------------------------------------------------------
-    if not archive.empty:
-        st.write("")
-        ui.eyebrow("Like this before")
-        st.subheader("Has a story like this happened before?", anchor=False)
-        like_this_before(data, archive, heads.head(15))
-
-    # ---- 4. Explore a topic -----------------------------------------------------
-    st.write("")
-    ui.eyebrow("Explore a topic")
-    st.subheader("Past news spikes and how oil reacted", anchor=False)
-    explore_topic(prices, data)
-
-    # ---- 4. Compare all topics ------------------------------------------------
-    news_results, news_paths = data["news"]
-    if not news_results.empty:
-        st.write("")
-        ui.eyebrow("All topics")
-        st.subheader("Average market move after a news spike, by topic", anchor=False)
-        all_topics(data, [k for k in TOPIC_KEYS if k in set(news_results["topic"])])
-
-    # ---- 5. Search the archive ---------------------------------------------------
-    st.write("")
-    ui.eyebrow("Search the past")
-    st.subheader("Look up any news theme", anchor=False)
-    search_section(data, archive)
+    _, is_live = latest_headlines(archive) if not archive.empty else (None, False)
+    headlines_section(todays_headlines(archive), is_live, archive)
+    st.caption("Want to know if a story like one of these has happened before? "
+               "Open **Like this before** at the top of this tab.")
 
 
 @st.fragment
@@ -277,6 +299,9 @@ def like_this_before(data, archive, heads) -> None:
     st.caption("Pick one of today's headlines, or type your own. We find the past stories "
                "worded most like it, and show what Brent did after each one.")
     options = heads["headline"].tolist() if not heads.empty else []
+    # Round-up headlines ("Benzinga Market Summary: ...") only match other
+    # round-ups, so put a specific story first
+    options = sorted(options, key=lambda h: "market summary" in h.lower())
     c1, c2 = st.columns([3, 2], vertical_alignment="bottom")
     picked = c1.selectbox("Today's headline", options, index=0 if options else None,
                           placeholder="No headlines right now", key="like_pick")

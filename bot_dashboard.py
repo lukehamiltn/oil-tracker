@@ -97,7 +97,7 @@ two hours before the 4pm ET close and only trade when their decision changes.
         col.caption(f"**Holding:** {f'{b['shares']:,.2f} {bot.SYMBOL}' if b['shares'] > 0 else 'cash'}  \n"
                     f"**Today's signal:** {'own ' + bot.SYMBOL if own else 'cash'}  \n{reason}")
     cols[-1].metric(f"Just holding {bot.SYMBOL}", f"{hold_return:+.2f}%",
-                    f"since {data['started']:%b %d, %Y}", delta_color="off", border=True)
+                    f"since {data['started']:%b %d, %Y}", delta_color="off", delta_arrow="off", border=True)
 
     if len(closes) > 1:
         fig = go.Figure()
@@ -115,7 +115,7 @@ two hours before the 4pm ET close and only trade when their decision changes.
                           hovermode="x unified", yaxis_tickprefix="$",
                           yaxis_title="Value of $50,000",
                           legend=dict(orientation="h", yanchor="top", y=-0.12, x=0))
-        st.plotly_chart(fig, width="stretch", key="bot_equity")
+        st.plotly_chart(fig, width="stretch", config=ui.CHART_CONFIG, key="bot_equity")
     else:
         st.caption(f"The bots started on {data['started']:%b %d, %Y}. "
                    "The performance chart appears after a couple of trading days.")

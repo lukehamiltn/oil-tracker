@@ -15,6 +15,8 @@ HORIZON_NAMES = {1: "1 day", 5: "1 week (5 trading days)", 20: "1 month (20 trad
 PCT = "%+.1f%%"
 MUTED = "#898781"
 GRID = "#ecebe6"
+# Every chart: no floating toolbar, no scroll-to-zoom (scrolling moves the page)
+CHART_CONFIG = {"displayModeBar": False, "scrollZoom": False}
 
 HORIZON_COLUMNS = {
     "day_1_pct": st.column_config.NumberColumn("1 day", format=PCT),
@@ -44,6 +46,14 @@ CSS = """
 .headline .meta { color: #898781; font-size: 0.8rem; margin-top: 0.1rem; }
 .chip { display: inline-block; font-size: 0.72rem; font-weight: 600; padding: 0.08rem 0.5rem;
         border-radius: 999px; margin-right: 0.3rem; color: #ffffff; }
+/* Header cards */
+.kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 0.5rem; }
+@media (max-width: 800px) { .kpi-row { grid-template-columns: repeat(2, 1fr); } }
+.kpi { border: 1px solid #e1e0d9; border-radius: 0.5rem; padding: 0.9rem 1rem; background: #ffffff; }
+.kpi-label { font-size: 0.85rem; color: #52514e; }
+.kpi-value { font-size: 1.55rem; font-weight: 700; letter-spacing: -0.02em; color: #1d1d1b;
+             line-height: 1.25; margin: 0.2rem 0 0.3rem; }
+.kpi-note { font-size: 0.8rem; font-weight: 500; }
 .footer { color: #898781; font-size: 0.8rem; margin-top: 3rem; padding-top: 1rem;
           border-top: 1px solid #ecebe6; }
 </style>
@@ -52,6 +62,22 @@ CSS = """
 
 def apply_styles() -> None:
     st.html(CSS)
+
+
+def rgba(hex_color: str, alpha: float) -> str:
+    h = hex_color.lstrip("#")
+    return f"rgba({int(h[0:2], 16)},{int(h[2:4], 16)},{int(h[4:6], 16)},{alpha})"
+
+
+def kpi_row(cards: list[tuple]) -> None:
+    """The headline numbers at the top of the site, as equal-height cards whose
+    text wraps instead of being cut off. Each card: (label, value, note, note_color)."""
+    html = "".join(
+        f'<div class="kpi"><div class="kpi-label">{label}</div>'
+        f'<div class="kpi-value">{value}</div>'
+        f'<div class="kpi-note" style="color:{color or MUTED}">{note}</div></div>'
+        for label, value, note, color in cards)
+    st.markdown(f'<div class="kpi-row">{html}</div>', unsafe_allow_html=True)
 
 
 def eyebrow(text: str) -> None:
@@ -208,7 +234,7 @@ def topic_picker(label: str, options: list, labels: dict, colors: dict, key: str
 def base_layout(fig: go.Figure, height: int = 400, **extra) -> go.Figure:
     fig.update_layout(
         height=height, margin=dict(l=8, r=8, t=24, b=8),
-        legend=dict(orientation="h", yanchor="top", y=-0.2, x=0, font=dict(size=12)),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0, font=dict(size=12)),
         hoverlabel=dict(bgcolor="white", bordercolor="#e1e0d9", font_color="#1d1d1b"),
         **extra)
     fig.update_xaxes(gridcolor=GRID, zeroline=False)
@@ -219,7 +245,7 @@ def base_layout(fig: go.Figure, height: int = 400, **extra) -> go.Figure:
 def style_event_chart(fig: go.Figure, y_title: str, height: int = 400) -> go.Figure:
     fig.add_hline(y=0, line_color="#c3c2b7", line_width=1)
     fig.add_vline(x=0, line_color=MUTED, line_dash="dot", line_width=1,
-                  annotation_text="close before the news",
+                  annotation_text="close before the news", annotation_position="bottom right",
                   annotation_font_size=11, annotation_font_color=MUTED)
     return base_layout(fig, height, hovermode="x unified",
                        xaxis_title="Trading days from the close before the news",
@@ -250,7 +276,7 @@ def comparison_section(prices, results, paths, cat_col, categories, labels, colo
         fig.add_trace(go.Scatter(
             x=avg.index, y=avg.values, mode="lines", name=f"{labels[cat]} ({len(dates)})",
             line=dict(color=colors[cat], width=2.5), hovertemplate="%{y:+.1f}%"))
-    st.plotly_chart(style_event_chart(fig, f"Average % change in {market}"), width="stretch",
+    st.plotly_chart(style_event_chart(fig, f"Average % change in {market}"), width="stretch", config=CHART_CONFIG,
                     key=f"{key}_avg_chart")
 
     horizon = st.segmented_control("Measure the change after", es.HORIZONS, default=1,
@@ -295,6 +321,8 @@ def drilldown_section(results, paths, cat_col, categories, labels, colors,
 def event_paths(group, paths, color, table_columns, key, market: str = "Brent") -> None:
     """Chart of the price path after each event in `group`, plus its table."""
     group = group.sort_values("date", ascending=False)
+    if "headline" in group:
+        group = group.assign(headline=group["headline"].fillna("").replace("", "—"))
     if group.empty:
         st.caption("No events of this kind yet.")
         return
@@ -316,8 +344,8 @@ def event_paths(group, paths, color, table_columns, key, market: str = "Brent") 
                                  line=dict(width=0), showlegend=False,
                                  hovertemplate="75th percentile: %{y:+.1f}%<extra></extra>"))
         fig.add_trace(go.Scatter(x=low.index, y=low.values, mode="lines",
-                                 line=dict(width=0), fill="tonexty", fillcolor=color,
-                                 opacity=0.2, name="Middle 50% of outcomes",
+                                 line=dict(width=0), fill="tonexty", fillcolor=rgba(color, 0.2),
+                                 name="Middle 50% of outcomes",
                                  hovertemplate="25th percentile: %{y:+.1f}%<extra></extra>"))
         note = ("Shaded band = where the middle half of outcomes landed. "
                 "Thick line = average. A wide band means the average isn't very reliable.")
@@ -328,7 +356,7 @@ def event_paths(group, paths, color, table_columns, key, market: str = "Brent") 
                              hovertemplate="Average: %{y:+.1f}%<extra></extra>"))
     fig = style_event_chart(fig, f"% change in {market}")
     fig.update_layout(hovermode="closest" if len(group) <= 60 else "x unified")
-    st.plotly_chart(fig, width="stretch", key=f"{key}_drill_chart")
+    st.plotly_chart(fig, width="stretch", config=CHART_CONFIG, key=f"{key}_drill_chart")
     st.caption(note)
     st.dataframe(group[[c for c in table_columns if c in group]], width="stretch",
                  hide_index=True, key=f"{key}_events", column_config=table_columns)

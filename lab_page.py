@@ -38,7 +38,7 @@ never saw. A rule that only works in the first period was probably luck.
     for col, (key, reading) in zip(cols, readings.items()):
         owns = bt_results[key]["position"].iloc[-1] > 0
         col.metric(strat.STRATEGIES[key][0], "Own oil" if owns else "Cash",
-                   reading, delta_color="off", border=True)
+                   reading, delta_color="off", delta_arrow="off", border=True)
 
     st.write("")
     st.markdown("**Growth of $10,000**")
@@ -56,7 +56,7 @@ never saw. A rule that only works in the first period was probably luck.
                   annotation_font_color=ui.MUTED)
     ui.base_layout(fig, 460, hovermode="x unified", yaxis_type="log",
                    yaxis_title="Value (log scale)", yaxis_tickprefix="$")
-    st.plotly_chart(fig, width="stretch", key="lab_equity")
+    st.plotly_chart(fig, width="stretch", config=ui.CHART_CONFIG, key="lab_equity")
     st.caption("Log scale: equal vertical distances = equal % gains. Based on Brent spot "
                "prices; trading through funds or futures differs.")
     results_table(bt_metrics)
@@ -70,6 +70,7 @@ def results_table(bt_metrics) -> None:
         ["annual_return_pct", "annual_volatility_pct", "sharpe", "max_drawdown_pct",
          "time_in_market_pct", "trades"]]
     st.dataframe(table, width="stretch", key="lab_table", column_config={
+        "label": st.column_config.TextColumn("Rule"),
         "annual_return_pct": st.column_config.NumberColumn("Return / year", format=ui.PCT),
         "annual_volatility_pct": st.column_config.NumberColumn("Volatility", format="%.1f%%"),
         "sharpe": st.column_config.NumberColumn(

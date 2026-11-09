@@ -121,7 +121,7 @@ For reference, across all days Brent's average move over the next month was
         label, fmt, help_text = INDICATORS[row["key"]]
         cols[i % 3].metric(label, fmt % row["today"],
                            f"{row['bucket']} · higher than {row['percentile']:.0f}% of days",
-                           delta_color="off", help=help_text, border=True)
+                           delta_color="off", delta_arrow="off", help=help_text, border=True)
 
     st.markdown("**What Brent did over the next month, when each indicator was in today's bucket**")
     st.dataframe(
@@ -144,11 +144,11 @@ For reference, across all days Brent's average move over the next month was
     a_up = (analogs["next_month_pct"] > 0).mean() * 100
     c1, c2, c3 = st.columns(3)
     c1.metric("Closest matches used", f"{len(analogs)}",
-              f"at least {MIN_GAP} trading days apart", delta_color="off", border=True)
+              f"at least {MIN_GAP} trading days apart", delta_color="off", delta_arrow="off", border=True)
     c2.metric("Brent over their next month: average", f"{a_avg:+.1f}%",
-              f"median {analogs['next_month_pct'].median():+.1f}%", delta_color="off", border=True)
+              f"median {analogs['next_month_pct'].median():+.1f}%", delta_color="off", delta_arrow="off", border=True)
     c3.metric("Brent rose afterwards", f"{a_up:.0f}% of the time",
-              f"all days: {base_up:.0f}%", delta_color="off", border=True)
+              f"all days: {base_up:.0f}%", delta_color="off", delta_arrow="off", border=True)
 
     # Price path after each analog
     price = features["price"]
@@ -172,7 +172,7 @@ For reference, across all days Brent's average move over the next month was
                       xaxis_title="Trading days after the matching day",
                       yaxis_title="% change in Brent",
                       legend=dict(orientation="h", yanchor="top", y=-0.18, x=0))
-    st.plotly_chart(fig, width="stretch", key="cond_analogs")
+    st.plotly_chart(fig, width="stretch", config=ui.CHART_CONFIG, key="cond_analogs")
     st.caption("Each thin line is one past day that looked like today. Hover to see which.")
 
     show = analogs.reset_index(names="date").sort_values("similarity", ascending=False)
