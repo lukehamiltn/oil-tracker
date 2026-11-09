@@ -85,6 +85,11 @@ or facility attacks, Middle East conflict or sanctions (a day's news count is on
 after the market has closed) and holds for a week. News history starts in 2017, so it has
 no design period at all.
 
+**Spike alerts.** Every 3 hours a job checks each topic's coverage the same way as the
+cards on the News tab. When a topic reaches "Spiking" it sends a push notification
+(through the free ntfy app) with the latest headline and what happened after past
+spikes. Each spike alerts once.
+
 **Trading bots** trade fake money in an Alpaca paper account at real prices, checking
 once each weekday in the two hours before the 4pm ET close.
 """)

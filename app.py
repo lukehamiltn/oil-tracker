@@ -24,6 +24,7 @@ import event_study as es
 import fed_events as fed
 import fetch_prices
 import history_page
+import alerts
 import live_prices
 import methodology
 import inventory_events as inv
@@ -48,7 +49,7 @@ st.set_page_config(page_title="Oil Tracker · oil news and market history",
 # ---------------------------------------------------------------------------
 OWN_MODULES = [es, inv, md, fed, fetch_prices, strat, bt, bot, news, mn, mk, ui,
                conditions, lab_page, bot_dashboard, news_page, history_page,
-               live_prices, methodology]
+               live_prices, methodology, alerts]
 
 
 @st.cache_resource
@@ -142,6 +143,9 @@ left, right = st.columns([5, 1], vertical_alignment="center")
 left.markdown(ui.masthead(pd.Timestamp.now(tz="America/New_York")), unsafe_allow_html=True)
 if right.button("Methodology", width="stretch", key="method_top"):
     methodology.show()
+right.link_button("Get spike alerts", alerts.SUBSCRIBE_URL, width="stretch",
+                  help="Free push notifications (ntfy app or browser) when an oil news topic "
+                       "starts spiking, with what happened after past spikes.")
 
 data = get_data()
 prices = data["prices"]

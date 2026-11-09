@@ -40,12 +40,7 @@ SPIKE_TABLE = {
 def current_heat(data: dict) -> tuple[pd.DataFrame, str]:
     """Topic heat from worldwide news, or from market news if the worldwide
     data is more than a few days old (e.g. GDELT blocked the daily update)."""
-    heat = news.current_heat(data["timelines"])
-    today = pd.Timestamp.now(tz="UTC").tz_localize(None).normalize()
-    if not heat.empty and heat["last_day"].max() >= today - pd.Timedelta(days=4):
-        return heat, "gdelt"
-    market = news.current_heat(data["market_timelines"], "market")
-    return (market, "market") if not market.empty else (heat, "gdelt")
+    return news.heat_now(data["timelines"], data["market_timelines"])
 
 
 @st.cache_data(ttl=15 * 60, show_spinner=False)

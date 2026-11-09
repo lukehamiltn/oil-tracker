@@ -282,6 +282,18 @@ def current_heat(timelines: pd.DataFrame, source: str = "gdelt") -> pd.DataFrame
     return pd.DataFrame(rows, columns=columns).sort_values("heat", ascending=False)
 
 
+def heat_now(timelines: pd.DataFrame, market_timelines: pd.DataFrame) -> tuple[pd.DataFrame, str]:
+    """Topic heat from worldwide news, or from market news if the worldwide
+    data is more than a few days old (e.g. GDELT blocked the daily update).
+    Returns (heat, source). Used by the website and by the alerts job."""
+    heat = current_heat(timelines)
+    today = pd.Timestamp.now(tz="UTC").tz_localize(None).normalize()
+    if not heat.empty and heat["last_day"].max() >= today - pd.Timedelta(days=4):
+        return heat, "gdelt"
+    market = current_heat(market_timelines, "market")
+    return (market, "market") if not market.empty else (heat, "gdelt")
+
+
 # ---------------------------------------------------------------------------
 # Headline tagging (used for the market news archive)
 # ---------------------------------------------------------------------------

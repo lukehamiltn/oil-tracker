@@ -1,0 +1,52 @@
+# Every 3 hours (20 minutes after the news refresh), checks whether any oil
+# news topic has started spiking and, if so, sends a push notification to the
+# site's ntfy.sh channel (see alerts.py). Remembers what it sent in
+# news_data/alerts_sent.json so each spike alerts only once.
+#
+# "Run workflow" with "send a test message" ticked sends one test alert, to
+# check the channel works.
+
+name: Spike alerts
+
+on:
+  schedule:
+    - cron: "5 1-22/3 * * *"
+  workflow_dispatch:
+    inputs:
+      test:
+        description: "Send a test message instead of checking for spikes"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write            # to save news_data/alerts_sent.json
+
+jobs:
+  alert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Check for spikes and send alerts
+        env:
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+        run: |
+          if [ "${{ inputs.test }}" = "true" ]; then
+            python alerts.py --test
+          else
+            python alerts.py
+          fi
+      - name: Save which alerts were sent
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add news_data/alerts_sent.json 2>/dev/null || exit 0
+          git diff --cached --quiet && exit 0
+          git commit -m "Record sent spike alerts"
+          git pull --rebase
+          git push
