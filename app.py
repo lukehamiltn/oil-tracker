@@ -35,7 +35,8 @@ import news_page
 import strategies as strat
 import ui
 
-st.set_page_config(page_title="Oil Tracker", page_icon="🛢️", layout="wide")
+st.set_page_config(page_title="Oil Tracker · oil news and market history",
+                   page_icon=":material/water_drop:", layout="wide")
 
 
 # ---------------------------------------------------------------------------
@@ -139,12 +140,9 @@ prices = data["prices"]
 # Header
 # ---------------------------------------------------------------------------
 left, right = st.columns([5, 1], vertical_alignment="center")
-left.markdown(
-    '<p class="hero-title">🛢️ Oil Tracker</p>'
-    '<p class="hero-sub">Today\'s oil news, matched to similar moments in the past, '
-    'and what the market did next.</p>', unsafe_allow_html=True)
+left.markdown(ui.masthead(pd.Timestamp.now(tz="America/New_York")), unsafe_allow_html=True)
 # A popover opens instantly in the browser (no page re-run).
-about = right.popover("ℹ️ How this works", width="stretch")
+about = right.popover("How this works", width="stretch")
 
 st.write("")
 @st.cache_data(ttl=5 * 60, show_spinner=False)
@@ -198,12 +196,12 @@ st.write("")
 # Tabs
 # ---------------------------------------------------------------------------
 tab_news, tab_history, tab_bots, tab_cond, tab_lab, tab_events = st.tabs([
-    ":material/newspaper: News → past",
-    ":material/timeline: Event history",
-    ":material/smart_toy: Paper trading bots",
-    ":material/thermostat: Market conditions",
-    ":material/science: Strategy lab",
-    ":material/event: Scheduled events",
+    "News",
+    "Event history",
+    "Trading bots",
+    "Market conditions",
+    "Strategy lab",
+    "Scheduled events",
 ])
 
 with tab_history:
@@ -254,8 +252,7 @@ EVENT_KINDS = {
 
 @st.fragment
 def scheduled_events() -> None:
-    ui.eyebrow("Scheduled events")
-    st.subheader("How markets reacted to regular, scheduled news", anchor=False)
+    st.subheader("Reports, meetings and rate decisions", anchor=False)
     kind = st.segmented_control("Event type", list(EVENT_KINDS),
                                 default="EIA weekly inventories",
                                 key="event_kind") or "EIA weekly inventories"
@@ -327,8 +324,10 @@ with tab_news:
 # Footer
 # ---------------------------------------------------------------------------
 st.markdown(
-    '<div class="footer">Data: GDELT Project (worldwide news), Benzinga via Alpaca (market news), U.S. EIA, FRED / Federal Reserve, '
-    'CFTC, Alpaca (live prices). A research tool, not investment advice.</div>',
+    '<div class="footer"><div><b>Oil Tracker</b> is an independent research project. '
+    'Nothing here is investment advice, and past reactions are no guarantee of future ones.</div>'
+    '<div>Data: GDELT Project (worldwide news) · Benzinga via Alpaca (market news) · '
+    'U.S. EIA · FRED / Federal Reserve · CFTC · Yahoo Finance (live futures prices)</div></div>',
     unsafe_allow_html=True)
 
 # ---------------------------------------------------------------------------

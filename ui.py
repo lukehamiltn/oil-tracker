@@ -26,16 +26,29 @@ HORIZON_COLUMNS = {
 
 CSS = """
 <style>
+@import url("https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&display=swap");
+/* Serif headings (the body text stays in the plain sans font) */
+h1, h2, h3, .wordmark { font-family: "Source Serif 4", Georgia, serif !important; }
+h3 { font-weight: 600 !important; }
 /* No link icons next to headings (they only scroll the page to the heading) */
 [data-testid="stHeaderActionElements"] { display: none !important; }
 /* Comfortable reading width on big screens */
 .block-container { max-width: 1240px; padding-top: 2.2rem; padding-bottom: 4rem; }
-/* Hero */
-.hero-title { font-size: 2.1rem; font-weight: 700; letter-spacing: -0.02em; margin: 0; color: #1d1d1b; }
-.hero-sub { font-size: 1.05rem; color: #52514e; margin: 0.25rem 0 0 0; }
-/* Tabs: a little more room and weight */
-.stTabs [data-baseweb="tab-list"] { gap: 0.4rem; border-bottom: 1px solid #e1e0d9; }
-.stTabs [data-baseweb="tab"] { padding: 0.55rem 0.9rem; font-weight: 500; }
+/* Hide Streamlit's own top bar, so the page starts with our masthead */
+[data-testid="stHeader"] { display: none; }
+.block-container { padding-top: 1.6rem !important; }
+/* Masthead */
+.masthead { display: flex; align-items: center; gap: 0.8rem; }
+.masthead .wordmark { font-family: "Source Serif 4", Georgia, serif; font-size: 2rem;
+    font-weight: 700; letter-spacing: -0.01em; color: #1d1d1b; line-height: 1; }
+.masthead .dek { font-size: 0.95rem; color: #52514e; margin-top: 0.3rem; }
+.dateline { font-size: 0.72rem; color: #898781; text-transform: uppercase;
+    letter-spacing: 0.08em; font-weight: 600; margin-bottom: 0.35rem; }
+/* Section headings: serif, with a little more air above them */
+h3 { letter-spacing: -0.005em; }
+/* Tabs: a plain section bar */
+.stTabs [data-baseweb="tab-list"] { gap: 0.2rem; box-shadow: inset 0 -1px 0 #1d1d1b; }
+.stTabs [data-baseweb="tab"] { padding: 0.55rem 0.95rem; font-weight: 600; font-size: 0.92rem; }
 /* Small grey label above a section */
 .eyebrow { text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.72rem;
            font-weight: 600; color: #898781; margin-bottom: 0.15rem; }
@@ -47,7 +60,7 @@ CSS = """
 .chip { display: inline-block; font-size: 0.72rem; font-weight: 600; padding: 0.08rem 0.5rem;
         border-radius: 999px; margin-right: 0.3rem; color: #ffffff; }
 /* Header cards */
-.kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 0.5rem; }
+.kpi-row { display: grid; grid-template-columns: repeat(var(--cols, 4), 1fr); gap: 1rem; margin-bottom: 0.5rem; }
 @media (max-width: 800px) { .kpi-row { grid-template-columns: repeat(2, 1fr); } }
 .kpi { border: 1px solid #e1e0d9; border-radius: 0.5rem; padding: 0.9rem 1rem; background: #ffffff; }
 .kpi-label { font-size: 0.85rem; color: #52514e; }
@@ -63,7 +76,8 @@ CSS = """
 .st-key-like_list [role="radiogroup"] label:has(input:checked) { background: #eef4fc;
     border-color: #2a78d6; box-shadow: inset 3px 0 0 #2a78d6; }
 .footer { color: #898781; font-size: 0.8rem; margin-top: 3rem; padding-top: 1rem;
-          border-top: 1px solid #ecebe6; }
+          border-top: 1px solid #1d1d1b; display: grid; gap: 0.35rem; }
+.footer b { color: #52514e; }
 </style>
 """
 
@@ -77,7 +91,7 @@ def rgba(hex_color: str, alpha: float) -> str:
     return f"rgba({int(h[0:2], 16)},{int(h[2:4], 16)},{int(h[4:6], 16)},{alpha})"
 
 
-def kpi_row(cards: list[tuple]) -> None:
+def kpi_row(cards: list[tuple], columns: int = 4) -> None:
     """The headline numbers at the top of the site, as equal-height cards whose
     text wraps instead of being cut off. Each card: (label, value, note, note_color)."""
     html = "".join(
@@ -85,7 +99,23 @@ def kpi_row(cards: list[tuple]) -> None:
         f'<div class="kpi-value">{value}</div>'
         f'<div class="kpi-note" style="color:{color or MUTED}">{note}</div></div>'
         for label, value, note, color in cards)
-    st.markdown(f'<div class="kpi-row">{html}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="kpi-row" style="--cols:{columns}">'
+                f'{html}</div>', unsafe_allow_html=True)
+
+
+# The logo: a simple oil drop with a falling-and-rising price line through it
+LOGO = ('<svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true">'
+        '<rect width="40" height="40" rx="8" fill="#1f3a5f"/>'
+        '<path d="M20 7 C20 7 11 18 11 24 a9 9 0 0 0 18 0 C29 18 20 7 20 7 Z" fill="#ffffff"/>'
+        '<polyline points="13,26 17,22 21,25 27,19" fill="none" stroke="#1f3a5f" '
+        'stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>')
+
+
+def masthead(now: pd.Timestamp) -> str:
+    return (f'<div class="dateline">{now:%A}, {now:%B} {now.day}, {now:%Y}</div>'
+            f'<div class="masthead">{LOGO}<div><div class="wordmark">Oil Tracker</div>'
+            '<div class="dek">Today\'s oil news, set against similar moments in the past '
+            'and what the market did next.</div></div></div>')
 
 
 def eyebrow(text: str) -> None:

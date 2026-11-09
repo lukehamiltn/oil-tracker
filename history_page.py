@@ -234,8 +234,7 @@ def _event_id(custom) -> int | None:
 
 @st.fragment
 def render(data: dict) -> None:
-    ui.eyebrow("Event history")
-    st.subheader("Every past oil event on one chart", anchor=False)
+    st.subheader("Past events on the price chart", anchor=False)
     st.caption("News spikes, OPEC+ decisions, Fed rate changes and the biggest EIA "
                "inventory surprises, placed on the price line. Hover a dot for a summary; "
                "click it to see what happened next. Drag to move through time.")

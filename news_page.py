@@ -125,10 +125,10 @@ def headline_list(heads: pd.DataFrame) -> None:
 
 
 VIEWS = {
-    "now": ":material/bolt: Now",
-    "like": ":material/history: Like this before",
-    "topics": ":material/category: Topics",
-    "search": ":material/search: Search the past",
+    "now": "Today",
+    "like": "Like this before",
+    "topics": "Topics",
+    "search": "Search",
 }
 
 
@@ -146,22 +146,18 @@ def render(prices: pd.Series, data: dict) -> None:
         if archive.empty:
             st.info("The news archive isn't available right now. Please try again later.")
             return
-        ui.eyebrow("Like this before")
-        st.subheader("Has a story like this happened before?", anchor=False)
+        st.subheader("Has this happened before?", anchor=False)
         like_this_before(data, archive, todays_headlines(archive).head(15))
     elif view == "topics":
-        ui.eyebrow("Explore a topic")
-        st.subheader("Past news spikes and how oil reacted", anchor=False)
+        st.subheader("One topic over time", anchor=False)
         explore_topic(prices, data)
         news_results = data["news"][0]
         if not news_results.empty:
             st.divider()
-            ui.eyebrow("All topics")
-            st.subheader("Average market move after a news spike, by topic", anchor=False)
+            st.subheader("All topics compared", anchor=False)
             all_topics(data, [k for k in TOPIC_KEYS if k in set(news_results["topic"])])
     else:
-        ui.eyebrow("Search the past")
-        st.subheader("Look up any news theme", anchor=False)
+        st.subheader("Search the archive", anchor=False)
         search_section(data, archive)
 
 
@@ -181,8 +177,7 @@ def now_view(data: dict) -> None:
 
     # ---- 1. What's in the news now ------------------------------------------
     if not heat.empty:
-        ui.eyebrow("In the news now")
-        st.subheader("Which oil stories are making headlines, and what happened last time", anchor=False)
+        st.subheader("What's in the news", anchor=False)
         st.caption(f"Coverage over the last 3 days compared with normal, from "
                    f"{SOURCE_NAMES[heat_source].split(' (')[0].lower()} (data to "
                    f"{heat['last_day'].max():%b %d, %Y}). For each topic: what Brent did "
@@ -228,8 +223,7 @@ def now_view(data: dict) -> None:
         st.write("")
 
     # ---- 2. Latest headlines ---------------------------------------------------
-    ui.eyebrow("Latest headlines")
-    st.subheader("Today's oil news", anchor=False)
+    st.subheader("Latest headlines", anchor=False)
     _, is_live = latest_headlines(archive) if not archive.empty else (None, False)
     headlines_section(todays_headlines(archive), is_live, archive)
     st.caption("Want to know if a story like one of these has happened before? "

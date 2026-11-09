@@ -104,8 +104,7 @@ def render(features: pd.DataFrame) -> None:
     base_avg = history["next_month_pct"].mean()
     base_up = (history["next_month_pct"] > 0).mean() * 100
 
-    ui.eyebrow("Market conditions")
-    st.subheader("How today's market compares with history", anchor=False)
+    st.subheader("Today against history", anchor=False)
     st.markdown(f"""
 Where does the oil market stand **today** compared with every trading day since 2007,
 and what did Brent do over the **following month** when conditions were similar?
@@ -188,4 +187,4 @@ For reference, across all days Brent's average move over the next month was
                  width="stretch", hide_index=True, key="cond_analog_table",
                  column_config=config)
     st.caption("Similarity compares all six indicators at once, each scaled to its "
-               "normal range. History rhymes but doesn't repeat. Not investment advice.")
+               "normal range.")

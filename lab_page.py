@@ -15,8 +15,7 @@ STRATEGY_COLORS = {"buy_and_hold": "#898781", "trend_200d": "#2a78d6",
 
 
 def render(features, bt_results, bt_metrics, inv_events) -> None:
-    ui.eyebrow("Strategy lab")
-    st.subheader("Which simple trading rules actually held up?", anchor=False)
+    st.subheader("Testing simple trading rules", anchor=False)
     st.markdown(f"""
 Each rule decides at every day's close whether to **own oil or sit in cash**, using
 only information that was public by then, and pays {bt.COST_PCT:.2f}% per trade.
@@ -34,11 +33,9 @@ never saw. A rule that only works in the first period was probably luck.
                          "of its 3-year range",
         "weak_dollar": f"Dollar {today['dollar_vs_50d_pct']:+.1f}% vs its 50-day avg",
     }
-    cols = st.columns(len(readings))
-    for col, (key, reading) in zip(cols, readings.items()):
-        owns = bt_results[key]["position"].iloc[-1] > 0
-        col.metric(strat.STRATEGIES[key][0], "Own oil" if owns else "Cash",
-                   reading, delta_color="off", delta_arrow="off", border=True)
+    ui.kpi_row([(strat.STRATEGIES[key][0],
+                 "Own oil" if bt_results[key]["position"].iloc[-1] > 0 else "Cash",
+                 reading, None) for key, reading in readings.items()], columns=len(readings))
 
     st.write("")
     st.markdown("**Growth of $10,000**")
@@ -80,5 +77,4 @@ def results_table(bt_metrics) -> None:
         "time_in_market_pct": st.column_config.NumberColumn("Time owning oil", format="%.0f%%"),
         "trades": st.column_config.NumberColumn("Trades"),
     })
-    st.caption("Compare each rule with buy-and-hold in the same period. Research only: "
-               "past results don't predict future ones. Not investment advice.")
+    st.caption("Compare each rule with buy-and-hold over the same period.")

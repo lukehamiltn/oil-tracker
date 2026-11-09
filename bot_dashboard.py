@@ -62,8 +62,7 @@ def load_bot_data():
 
 
 def render() -> None:
-    ui.eyebrow("Paper trading bots")
-    st.subheader("Two bots trading fake money at real prices", anchor=False)
+    st.subheader("Two paper-trading bots", anchor=False)
     st.markdown(f"""
 Two automated bots trade **fake money** in a paper account at **real market
 prices** (via Alpaca). Each starts with **$50,000** and trades **{bot.SYMBOL}**,
@@ -140,7 +139,6 @@ two hours before the 4pm ET close and only trade when their decision changes.
             "price": st.column_config.NumberColumn("Price", format="$%.2f"),
             "value": st.column_config.NumberColumn("Value", format="$%,.2f"),
         })
-    st.caption(f"Whole paper account: ${data['account_equity']:,.2f}. A research "
-               "experiment with fake money, not investment advice. Paper trading "
+    st.caption(f"Whole paper account: ${data['account_equity']:,.2f}. Paper trading "
                "ignores some real-world costs, and a rule that worked in the past "
                "can stop working.")
