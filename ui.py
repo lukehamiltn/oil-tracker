@@ -90,6 +90,15 @@ CARD_CSS = """
 .verdict { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.74rem; font-weight: 600;
            padding: 0.12rem 0.55rem 0.12rem 0.45rem; border: 1.5px solid; border-radius: 6px;
            background: #ffffff; margin-top: 0.35rem; }
+/* Hover explanation above the pattern badge */
+.verdict-wrap { position: relative; display: inline-block; cursor: help; }
+.verdict-wrap .tip { visibility: hidden; opacity: 0; transition: opacity 0.15s;
+    position: absolute; bottom: calc(100% + 8px); left: 0; width: 235px; z-index: 20;
+    background: #1d1d1b; color: #ffffff; font-size: 0.75rem; font-weight: 400; line-height: 1.45;
+    padding: 0.55rem 0.7rem; border-radius: 7px; box-shadow: 0 4px 14px rgba(0,0,0,0.18); }
+.verdict-wrap .tip::after { content: ""; position: absolute; top: 100%; left: 18px;
+    border: 6px solid transparent; border-top-color: #1d1d1b; }
+.verdict-wrap:hover .tip { visibility: visible; opacity: 1; }
 </style>
 """
 
@@ -111,15 +120,35 @@ def heat_gauge(heat: float, color: str, top: float = 3.0) -> str:
             f'<span style="position:absolute;right:0">{top:.0f}×+</span></div>')
 
 
-def verdict_badge(verdict: str) -> str:
-    """Outlined badge with 0–3 signal bars: how sure we are the pattern is real."""
+def verdict_tip(verdict: str, p: float, n: int, what: str = "week") -> str:
+    """Plain-words explanation of a pattern verdict, with this case's numbers."""
+    share = "under 1%" if p < 0.01 else f"{p:.0%}"
+    sets = f"Random sets of {n} ordinary days"
+    return {
+        "strong": f"<b>Very likely real.</b> {sets} (picked thousands of times) moved this far "
+                  f"from normal only {share} of the time, so luck is an unlikely explanation.",
+        "possible": f"<b>Maybe real.</b> {sets} moved this far from normal {share} of the time. "
+                    "That's unusual, but not rare enough to rule out luck.",
+        "noise": f"<b>Could just be luck.</b> {sets} moved this far from normal {share} of the "
+                 f"time, so the {what} after these events isn't clearly different from any other.",
+        "few": "<b>Too few events.</b> With fewer than 5 past cases we can't tell a pattern "
+               "from luck.",
+    }[verdict]
+
+
+def verdict_badge(verdict: str, tip: str | None = None) -> str:
+    """Outlined badge with 0–3 signal bars: how sure we are the pattern is real.
+    With tip, hovering the badge shows that explanation."""
     text, color = mk.VERDICTS[verdict]
     level = VERDICT_BARS[verdict]
     bars = "".join(
         f'<rect x="{i * 5}" y="{8 - 3 * i}" width="3.5" height="{4 + 3 * i}" rx="1" '
         f'fill="{color if i < level else "#d6d4cc"}"/>' for i in range(3))
-    return (f'<span class="verdict" style="color:{color};border-color:{color}">'
-            f'<svg width="14" height="12" viewBox="0 0 14 12">{bars}</svg>{text}</span>')
+    badge = (f'<span class="verdict" style="color:{color};border-color:{color}">'
+             f'<svg width="14" height="12" viewBox="0 0 14 12">{bars}</svg>{text}</span>')
+    if tip:
+        badge = f'<span class="verdict-wrap">{badge}<span class="tip">{tip}</span></span>'
+    return badge
 
 
 def topic_picker(label: str, options: list, labels: dict, colors: dict, key: str,

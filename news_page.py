@@ -161,14 +161,16 @@ def render(prices: pd.Series, data: dict) -> None:
                 # History: what happened after past spikes, and is it real?
                 if len(past):
                     week = past["day_5_pct"]
-                    verdict = data["sig"].check("BRENT", 5, week)
+                    p = data["sig"].p_value("BRENT", 5, week)
+                    verdict = data["sig"].verdict(p, week.notna().sum())
+                    tip = ui.verdict_tip(verdict, p, int(week.notna().sum()), "week for Brent")
                     shade = ui.MUTED if verdict in ("noise", "few") else "#1d1d1b"
                     st.markdown(
                         "<div class='card-rule'></div>"
                         f"<div class='eyebrow' style='margin-top:0.4rem'>After {len(past)} past spikes</div>"
                         f"<div class='past'>Brent <b style='color:{shade}'>{week.mean():+.1f}%</b> "
                         f"the next week · rose {(week > 0).mean():.0%} of the time</div>"
-                        + ui.verdict_badge(verdict),
+                        + ui.verdict_badge(verdict, tip),
                         unsafe_allow_html=True)
                 else:
                     st.caption("No past spikes to compare with yet.")
