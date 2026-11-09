@@ -87,7 +87,6 @@ CARD_CSS = """
 .card-title { font-weight: 600; line-height: 1.35; margin: 0.35rem 0 0.1rem; height: 2.7em;
               display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .past { font-size: 0.85rem; color: #52514e; line-height: 1.45; min-height: 2.9em; }
-.past b { font-size: 1.05rem; }
 .verdict { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.74rem; font-weight: 600;
            padding: 0.12rem 0.55rem 0.12rem 0.45rem; border: 1.5px solid; border-radius: 6px;
            background: #ffffff; margin-top: 0.35rem; }

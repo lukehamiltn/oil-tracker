@@ -144,9 +144,10 @@ def render(prices: pd.Series, data: dict) -> None:
             past = results[results["topic"] == row["topic"]]
             label, color, tint = status(row["heat"])
             key = f"heat_card_{row['topic']}"
-            # every card: a top edge and faint background in its status colour
-            card_css.append(f".st-key-{key} {{ background: {tint}; "
-                            f"box-shadow: inset 0 4px 0 {color}; }}")
+            # every card: a faint background in its status colour, plus a
+            # coloured top edge that appears on hover
+            card_css.append(f".st-key-{key} {{ background: {tint}; transition: box-shadow 0.15s; }} "
+                            f".st-key-{key}:hover {{ box-shadow: inset 0 4px 0 {color}; }}")
             with cols[i % 4].container(border=True, height="stretch", key=key):
                 # Now: how loud is this story?
                 number_color = "#1d1d1b" if label == "Normal" else color
