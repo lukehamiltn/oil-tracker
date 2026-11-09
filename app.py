@@ -57,17 +57,22 @@ def _loaded_versions() -> dict:
     return {}          # one per server process: {module name: file timestamp}
 
 
-def _reload_if_changed() -> None:
+def _reload_if_changed() -> bool:
+    """Reload our modules if any file changed; True if it did."""
     seen = _loaded_versions()
     current = {m.__name__: os.path.getmtime(m.__file__) for m in OWN_MODULES}
-    if seen != current:
-        for module in OWN_MODULES:
-            importlib.reload(module)
-        seen.clear()
-        seen.update(current)
+    if seen == current:
+        return False
+    for module in OWN_MODULES:
+        importlib.reload(module)
+    seen.clear()
+    seen.update(current)
+    return True
 
 
-_reload_if_changed()
+# New code can expect data the old code never built (e.g. a new column), so
+# after an update the saved data is rebuilt too (see get_data below).
+CODE_CHANGED = _reload_if_changed()
 ui.apply_styles()
 
 
@@ -147,6 +152,8 @@ right.link_button("Get spike alerts", alerts.SUBSCRIBE_URL, width="stretch",
                   help="Free push notifications (ntfy app or browser) when an oil news topic "
                        "starts spiking, with what happened after past spikes.")
 
+if CODE_CHANGED:
+    get_data.clear()
 data = get_data()
 prices = data["prices"]
 

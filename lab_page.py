@@ -38,7 +38,8 @@ never saw. A rule that only works in the first period was probably luck.
     }
     ui.kpi_row([(strat.STRATEGIES[key][0],
                  "Own oil" if bt_results[key]["position"].iloc[-1] > 0 else "Cash",
-                 reading, None) for key, reading in readings.items()], columns=3)
+                 reading, None) for key, reading in readings.items()
+                if key in bt_results], columns=3)     # (skip a rule whose results aren't built yet)
 
     st.write("")
     st.markdown("**Growth of $10,000**")
@@ -63,6 +64,8 @@ never saw. A rule that only works in the first period was probably luck.
 
 
 def last_supply_spike(features) -> str:
+    if "supply_news" not in features:
+        return "News data loading"
     spikes = features["supply_news"].dropna()
     if spikes.empty:
         return "No supply-threat news spikes yet"
