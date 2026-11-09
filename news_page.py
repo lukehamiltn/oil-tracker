@@ -294,6 +294,11 @@ def past_matches(text: str, before: pd.Timestamp, _archive: pd.DataFrame,
     return mk.reactions(_markets, found)
 
 
+def _ago(time: pd.Timestamp) -> str:
+    hours = max(int((pd.Timestamp.now(tz="UTC") - time).total_seconds() // 3600), 0)
+    return f"{hours}h ago" if hours < 48 else f"{time:%b %d, %Y}"
+
+
 def _plain(text: str) -> str:
     """Show text exactly as written (radio labels are read as Markdown, where
     $ * _ and friends would change the formatting)."""
@@ -315,9 +320,12 @@ def like_this_before(data, archive, heads) -> None:
     with c1:
         st.markdown("**Today's headlines**")
         if options:
-            with st.container(height=230, key="like_list"):
+            with st.container(height=340, key="like_list"):
+                meta = {h["headline"]: f"{h['source']} · {_ago(h['time'])}"
+                        for _, h in heads.iterrows()}
                 picked = st.radio("Today's headline", options, index=0, key="like_pick",
-                                  format_func=_plain, label_visibility="collapsed")
+                                  format_func=lambda h: f"{_plain(h)}  \n:gray[{_plain(meta.get(h, ''))}]",
+                                  label_visibility="collapsed")
         else:
             picked = None
             st.caption("No headlines right now.")

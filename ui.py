@@ -54,10 +54,14 @@ CSS = """
 .kpi-value { font-size: 1.55rem; font-weight: 700; letter-spacing: -0.02em; color: #1d1d1b;
              line-height: 1.25; margin: 0.2rem 0 0.3rem; }
 .kpi-note { font-size: 0.8rem; font-weight: 500; }
-/* "Like this before" headline list: one headline per row, a line between rows */
-.st-key-like_list [role="radiogroup"] label { padding: 0.35rem 0; border-bottom: 1px solid #ecebe6;
-    width: 100%; align-items: flex-start; }
-.st-key-like_list [role="radiogroup"] { gap: 0 !important; }
+/* "Like this before" headline list: each headline its own small card */
+.st-key-like_list [role="radiogroup"] { gap: 0.45rem !important; }
+.st-key-like_list [role="radiogroup"] label { width: 100%; margin: 0; align-items: flex-start;
+    padding: 0.55rem 0.75rem; border: 1px solid #e1e0d9; border-radius: 8px; background: #ffffff;
+    transition: background 0.12s, border-color 0.12s; }
+.st-key-like_list [role="radiogroup"] label:hover { background: #f7f6f2; border-color: #c3c2b7; }
+.st-key-like_list [role="radiogroup"] label:has(input:checked) { background: #eef4fc;
+    border-color: #2a78d6; box-shadow: inset 3px 0 0 #2a78d6; }
 .footer { color: #898781; font-size: 0.8rem; margin-top: 3rem; padding-top: 1rem;
           border-top: 1px solid #ecebe6; }
 </style>
