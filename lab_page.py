@@ -54,7 +54,7 @@ never saw. A rule that only works in the first period was probably luck.
     ui.base_layout(fig, 460, hovermode="x unified", yaxis_type="log",
                    yaxis_title="Value (log scale)", yaxis_tickprefix="$")
     st.plotly_chart(fig, width="stretch", config=ui.CHART_CONFIG, key="lab_equity")
-    st.caption("Log scale: equal vertical distances = equal % gains. Based on Brent spot "
+    ui.tip("Log scale: equal vertical distances = equal % gains. Based on Brent spot "
                "prices; trading through funds or futures differs.")
     results_table(bt_metrics)
 

@@ -226,8 +226,8 @@ def now_view(data: dict) -> None:
     st.subheader("Latest headlines", anchor=False)
     _, is_live = latest_headlines(archive) if not archive.empty else (None, False)
     headlines_section(todays_headlines(archive), is_live, archive)
-    st.caption("Want to know if a story like one of these has happened before? "
-               "Open **Like this before** at the top of this tab.")
+    st.button("Has a story like one of these happened before? →", type="tertiary",
+              key="to_like", on_click=lambda: st.session_state.update(news_view="like"))
 
 
 @st.fragment
@@ -256,7 +256,7 @@ def headlines_section(heads: pd.DataFrame, is_live: bool, archive: pd.DataFrame)
     else:
         st.info("Headlines are temporarily unavailable; the rest of the page works as normal.")
         return
-    st.caption("Market news from Benzinga via Alpaca. Tags are assigned by keyword, so a "
+    ui.tip("Market news from Benzinga via Alpaca. Tags are assigned by keyword, so a "
                "few stories may be tagged imperfectly. Click a headline to read the article.")
 
 
@@ -362,7 +362,7 @@ def like_this_before(data, archive, heads) -> None:
     ui.event_paths(results, paths, "#2a78d6", MATCH_TABLE, key="like_paths")
     st.markdown("**How every market moved after these stories**")
     ui.market_reaction_table(by_market, data["typical"], key="like", sig=data["sig"])
-    st.caption("Similarity is based on shared wording (rare words like place and company "
+    ui.tip("Similarity is based on shared wording (rare words like place and company "
                "names count most), so check the headlines to judge how alike the stories "
                "really are. With about 10 matches, one big move can swing the average.")
 
@@ -378,7 +378,7 @@ def all_topics(data, available) -> None:
     st.markdown("**The same news spikes in every market**")
     ui.cross_market_section(data["react"]["news"], data["typical"], "topic", available,
                             LABELS, key="news_cmp", sig=data["sig"])
-    st.caption("Based on worldwide news spikes (GDELT).")
+    ui.tip("Based on news spikes in worldwide news coverage (GDELT).", "Source")
 
 
 @st.fragment
@@ -399,9 +399,9 @@ def explore_topic(prices, data) -> None:
         return
     spikes = results[results["topic"] == topic] if not results.empty else results
     if source == "gdelt":
-        st.caption(f"Worldwide news search used: `{news.TOPICS[topic]['query']}`")
+        ui.tip(f"`{news.TOPICS[topic]['query']}`", "Search used for worldwide news")
     else:
-        st.caption("Share of all saved oil-market news whose headline matches this topic.")
+        ui.tip("Share of all saved oil-market news whose headline matches this topic.")
     coverage_chart(t, spikes, COLORS[topic], key="news_cov", source=source)
     st.markdown(f"**{name} after each of the {len(spikes)} news spikes**")
     ui.event_paths(spikes, paths, COLORS[topic], SPIKE_TABLE, key="news_topic_paths",

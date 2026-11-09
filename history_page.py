@@ -177,7 +177,7 @@ def reaction_table(data: dict, event) -> None:
         shades[name] = [ui._shade(v, data["typical"][h][k]) for v, k in zip(values, rows)]
     st.dataframe(shown.style.apply(lambda _: shades, axis=None), width="stretch",
                  key="history_reaction")
-    st.caption("Colour strength = how big the move was compared with that market's "
+    ui.tip("Colour strength = how big the move was compared with that market's "
                "ordinary moves.")
 
 

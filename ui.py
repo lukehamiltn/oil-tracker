@@ -4,6 +4,8 @@ the page styling, chart styling, and the event-study sections reused by the
 News, EIA, OPEC+ and Fed pages.
 """
 
+import re
+
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
@@ -87,6 +89,17 @@ h3 { letter-spacing: -0.005em; }
 .st-key-like_list [role="radiogroup"] label:hover { background: #f7f6f2; border-color: #c3c2b7; }
 .st-key-like_list [role="radiogroup"] label:has(input:checked) { background: #eef4fc;
     border-color: #2a78d6; box-shadow: inset 3px 0 0 #2a78d6; }
+/* "How to read this" notes */
+.note { font-size: 0.8rem; color: #898781; margin: -0.3rem 0 0.4rem; }
+.note-wrap { position: relative; cursor: help; border-bottom: 1px dotted #c3c2b7; outline: none; }
+.note-tip { visibility: hidden; opacity: 0; transition: opacity 0.15s; position: absolute;
+    left: 0; top: calc(100% + 6px); width: min(360px, 80vw); z-index: 30; background: #1d1d1b;
+    color: #ffffff; font-size: 0.78rem; line-height: 1.5; padding: 0.6rem 0.75rem;
+    border-radius: 7px; box-shadow: 0 4px 14px rgba(0,0,0,0.18); }
+.note-tip code { color: #ffffff; background: rgba(255,255,255,0.12); }
+.note-wrap:hover .note-tip, .note-wrap:focus .note-tip { visibility: visible; opacity: 1; }
+/* No floating toolbar (eye / download / search / full screen) over tables */
+[data-testid="stElementToolbar"] { display: none !important; }
 .footer { color: #898781; font-size: 0.8rem; margin-top: 3rem; padding-top: 1rem;
           border-top: 1px solid #1d1d1b; display: grid; gap: 0.35rem; }
 .footer b { color: #52514e; }
@@ -128,6 +141,21 @@ def masthead(now: pd.Timestamp) -> str:
             f'<div class="masthead">{LOGO}<div><div class="wordmark">Oil Tracker</div>'
             '<div class="dek">Today\'s oil news, set against similar moments in the past '
             'and what the market did next.</div></div></div>')
+
+
+def _md(text: str) -> str:
+    """The little bit of Markdown our notes use (**bold**, *italic*, `code`) as HTML."""
+    text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
+    text = re.sub(r"\*(.+?)\*", r"<i>\1</i>", text)
+    return re.sub(r"`(.+?)`", r"<code>\1</code>", text)
+
+
+def tip(text: str, label: str = "How to read this") -> None:
+    """A short "ⓘ How to read this" line; the explanation shows on hover (or tap),
+    so the page isn't covered in grey small print."""
+    st.markdown(f'<div class="note"><span class="note-wrap" tabindex="0">ⓘ {label}'
+                f'<span class="note-tip">{_md(text)}</span></span></div>',
+                unsafe_allow_html=True)
 
 
 def eyebrow(text: str) -> None:
@@ -334,7 +362,7 @@ def comparison_section(prices, results, paths, cat_col, categories, labels, colo
                                    key=f"{key}_horizon") or 1
     col = f"day_{horizon}_pct"
     summary = (results.groupby(cat_col)[col]
-               .agg(events="count", average="mean", median="median",
+               .agg(events="count", average="mean",
                     pct_up=lambda s: (s > 0).mean() * 100, best="max", worst="min")
                .reindex(categories).dropna(how="all"))
     if sig is not None:
@@ -347,12 +375,11 @@ def comparison_section(prices, results, paths, cat_col, categories, labels, colo
                              "See 'How this works'."),
         "events": st.column_config.NumberColumn("Events"),
         "average": st.column_config.NumberColumn("Average", format=PCT),
-        "median": st.column_config.NumberColumn("Median", format=PCT),
         "pct_up": st.column_config.NumberColumn("Times price rose", format="%.0f%%"),
         "best": st.column_config.NumberColumn("Best", format=PCT),
         "worst": st.column_config.NumberColumn("Worst", format=PCT),
     })
-    st.caption(f"For comparison: at any ordinary time, {market}'s typical move over "
+    tip(f"For comparison: at any ordinary time, {market}'s typical move over "
                f"{HORIZON_NAMES[horizon]} is about ±{es.typical_move(prices, horizon):.1f}%. "
                "**Pattern?** says how unlikely the average would be on random days: "
                "a strong pattern happens by chance less than 2% of the time.")
@@ -407,7 +434,7 @@ def event_paths(group, paths, color, table_columns, key, market: str = "Brent") 
     fig = style_event_chart(fig, f"% change in {market}")
     fig.update_layout(hovermode="closest" if len(group) <= 60 else "x unified")
     st.plotly_chart(fig, width="stretch", config=CHART_CONFIG, key=f"{key}_drill_chart")
-    st.caption(note)
+    tip(note)
     st.dataframe(group[[c for c in table_columns if c in group]], width="stretch",
                  hide_index=True, key=f"{key}_events", column_config=table_columns)
 
@@ -468,7 +495,7 @@ def cross_market_section(by_market: dict, typical: dict, cat_col, categories, la
                  column_config={k: st.column_config.Column(mk.MARKETS[k][1])
                                 for k in means.columns})
     notes = " ".join(mk.NOTES[k] for k in means.columns if k in mk.NOTES)
-    st.caption("Average move from the close before each event. Green = rose, red = fell; "
+    tip("Average move from the close before each event. Green = rose, red = fell; "
                "the stronger the colour, the bigger the move compared with that market's "
                f"typical move (bottom row). {LEGEND}. {notes}")
 
@@ -493,4 +520,4 @@ def market_reaction_table(by_market: dict, typical: dict, keep=None, key: str = 
     st.dataframe(shown.style.apply(lambda _: shades, axis=None), width="stretch",
                  key=f"{key}_mtable", column_config={"market": st.column_config.Column("Market")})
     if sig is not None:
-        st.caption(LEGEND + ".")
+        tip(LEGEND + ".")

@@ -25,6 +25,11 @@ HORIZON = 20                 # trading days ahead (~1 month)
 N_ANALOGS = 15
 MIN_GAP = 20                 # analog days must be >= 20 trading days apart
 
+# Short column names for the table of similar past days (full names on hover)
+SHORT = {"trend_gap_pct": "vs 200-day", "momentum_3m_pct": "3-month change",
+         "volatility_1m_pct": "Volatility", "inv_vs_normal_pct": "Stocks vs normal",
+         "positioning_pct": "Hedge funds", "dollar_vs_50d_pct": "Dollar vs 50-day"}
+
 INDICATORS = {
     "trend_gap_pct": ("Brent vs its 200-day average", "%+.1f%%",
                       "Above = uptrend; far above can mean stretched."),
@@ -132,7 +137,7 @@ For reference, across all days Brent's average move over the next month was
             "avg_next_month": st.column_config.NumberColumn("Avg next month", format="%+.1f%%"),
             "pct_up": st.column_config.NumberColumn("Times Brent rose", format="%.0f%%"),
         })
-    st.caption(f"Compare each row with the all-days figures above ({base_avg:+.1f}%, "
+    ui.tip(f"Compare each row with the all-days figures above ({base_avg:+.1f}%, "
                f"rose {base_up:.0f}% of the time). Days next to each other overlap heavily, "
                "so 'past days' overstates how much independent evidence there is.")
 
@@ -172,7 +177,7 @@ For reference, across all days Brent's average move over the next month was
                       yaxis_title="% change in Brent",
                       legend=dict(orientation="h", yanchor="top", y=-0.18, x=0))
     st.plotly_chart(fig, width="stretch", config=ui.CHART_CONFIG, key="cond_analogs")
-    st.caption("Each thin line is one past day that looked like today. Hover to see which.")
+    ui.tip("Each thin line is one past day that looked like today. Hover to see which.")
 
     show = analogs.reset_index(names="date").sort_values("similarity", ascending=False)
     config = {
@@ -182,9 +187,9 @@ For reference, across all days Brent's average move over the next month was
         "next_month_pct": st.column_config.NumberColumn("Brent next month", format="%+.1f%%"),
     }
     for col, (label, fmt, _) in INDICATORS.items():
-        config[col] = st.column_config.NumberColumn(label, format=fmt)
+        config[col] = st.column_config.NumberColumn(SHORT[col], format=fmt, help=label)
     st.dataframe(show[["date", "similarity", "next_month_pct", *INDICATORS]],
                  width="stretch", hide_index=True, key="cond_analog_table",
                  column_config=config)
-    st.caption("Similarity compares all six indicators at once, each scaled to its "
+    ui.tip("Similarity compares all six indicators at once, each scaled to its "
                "normal range.")
