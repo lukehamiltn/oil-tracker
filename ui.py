@@ -59,6 +59,12 @@ h3 { letter-spacing: -0.005em; }
 .headline a { color: #1d1d1b; text-decoration: none; font-weight: 500; }
 .headline a:hover { color: #256abf; text-decoration: underline; }
 .headline .meta { color: #898781; font-size: 0.8rem; margin-top: 0.1rem; }
+.headline .flash-title { color: #1d1d1b; font-weight: 500; }
+.headline .summary { color: #52514e; font-size: 0.86rem; margin-top: 0.15rem; line-height: 1.45;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.headline .flash { text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.68rem;
+    font-weight: 700; color: #52514e; }
+.headline .meta a.more { color: #1f4e8c; font-weight: 500; }
 .chip { display: inline-block; font-size: 0.72rem; font-weight: 600; padding: 0.08rem 0.5rem;
         border-radius: 999px; margin-right: 0.3rem; color: #ffffff; }
 /* Header cards */

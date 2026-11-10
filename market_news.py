@@ -25,6 +25,7 @@ import os
 import re
 import sys
 import time
+from urllib.parse import quote
 from pathlib import Path
 
 import pandas as pd
@@ -101,6 +102,23 @@ def fetch(start: pd.Timestamp, end: pd.Timestamp, timeout: float = 30,
             break
         time.sleep(0.35)                        # stay well under the limit
     return to_table(rows)
+
+
+def is_flash(summary) -> bool:
+    """Benzinga "newsdesk" flashes are a single headline with no article behind
+    them (their page is empty), and come with no summary."""
+    return not isinstance(summary, str) or not summary.strip()
+
+
+def coverage_url(headline: str) -> str:
+    """A news search for the same story, for flashes that have no article."""
+    return "https://news.google.com/search?q=" + quote(headline[:150])
+
+
+def read_url(row) -> str:
+    """Where a reader should go for a story: the article, or for a flash,
+    other outlets' coverage of it."""
+    return coverage_url(row["headline"]) if is_flash(row["summary"]) else row["url"]
 
 
 def to_table(rows: list[dict]) -> pd.DataFrame:
@@ -262,7 +280,11 @@ def similar(matcher, text: str, before: pd.Timestamp, n: int = 10,
         if len(picked) == n:
             break
     columns = ["time", "day", "headline", "source", "url", "topics", "score"]
-    return pd.DataFrame(picked)[columns] if picked else pd.DataFrame(columns=columns)
+    if not picked:
+        return pd.DataFrame(columns=columns)
+    found = pd.DataFrame(picked)
+    found["url"] = [read_url(r) for _, r in found.iterrows()]   # flashes -> coverage search
+    return found[columns]
 
 
 # ---------------------------------------------------------------------------

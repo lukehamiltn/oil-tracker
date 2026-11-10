@@ -112,10 +112,20 @@ def headline_list(heads: pd.DataFrame) -> None:
         hours = max(int((now - h["time"]).total_seconds() // 3600), 0)
         ago = f"{hours}h ago" if hours < 48 else f"{h['time']:%b %d, %Y}"
         chips = "".join(ui.chip(LABELS[t], COLORS[t]) for t in h["topics"])
-        rows.append(
-            f'<div class="headline"><a href="{html.escape(h["url"])}" target="_blank">'
-            f'{html.escape(h["headline"])}</a><div class="meta">{chips}'
-            f'{html.escape(h["source"])} · {ago}</div></div>')
+        title = html.escape(h["headline"])
+        if mn.is_flash(h.get("summary")):
+            # A one-line newswire flash: the headline is the whole story, and
+            # the source page is empty, so point to other outlets' coverage
+            body = (f'<span class="flash-title">{title}</span>')
+            extra = (f' · <span class="flash">Newswire flash</span> · '
+                     f'<a class="more" href="{html.escape(mn.coverage_url(h["headline"]))}" '
+                     f'target="_blank">Find coverage ↗</a>')
+        else:
+            body = (f'<a href="{html.escape(h["url"])}" target="_blank">{title}</a>'
+                    f'<div class="summary">{html.escape(h["summary"])}</div>')
+            extra = ""
+        rows.append(f'<div class="headline">{body}<div class="meta">{chips}'
+                    f'{html.escape(h["source"])} · {ago}{extra}</div></div>')
     st.markdown("".join(rows), unsafe_allow_html=True)
 
 
@@ -262,7 +272,9 @@ MATCH_TABLE = {
     "score": st.column_config.ProgressColumn("Similarity", format="%.2f", min_value=0,
                                              max_value=1),
     **ui.HORIZON_COLUMNS,
-    "url": st.column_config.LinkColumn("Article", display_text="Open"),
+    "url": st.column_config.LinkColumn("Read", display_text="Open ↗",
+                                       help="The article, or for one-line newswire flashes "
+                                            "(no article), other outlets' coverage"),
 }
 
 
