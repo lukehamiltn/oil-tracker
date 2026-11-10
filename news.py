@@ -83,7 +83,12 @@ TOPICS = {
     },
     "demand": {
         "label": "Oil demand & recession fears",
-        "query": '(recession OR slowdown OR "demand outlook") ("oil demand" OR "crude demand")',
+        # A worry about demand or the economy, in a story about oil prices
+        # (picks out the 2015-16 crash, 2019 and 2022 slowdown fears, Covid)
+        "query": '(recession OR "economic slowdown" OR "demand destruction" OR "demand fears" OR '
+                 '"demand worries" OR "demand concerns" OR "weak demand" OR "oil demand" OR '
+                 '"crude demand" OR "fuel demand") ("oil prices" OR "crude prices" OR '
+                 '"oil price" OR "crude oil")',
         "keywords": r"demand|recession|slowdown|china.*(import|economy)",
         "color": "#6250d6",
     },

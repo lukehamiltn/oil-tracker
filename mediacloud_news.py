@@ -54,9 +54,18 @@ def to_mediacloud(query: str) -> str:
     return " AND ".join(parts)
 
 
-def counts(search, query: str, start: dt.date, end: dt.date) -> pd.DataFrame:
-    rows = search.story_count_over_time(to_mediacloud(query), start, end,
-                                        collection_ids=COLLECTIONS)
+def counts(search, query: str, start: dt.date, end: dt.date, tries: int = 3) -> pd.DataFrame:
+    """Daily counts for one search. Media Cloud sometimes drops a long answer
+    halfway, so a failed request is retried (after a pause) a couple of times."""
+    for attempt in range(tries):
+        try:
+            rows = search.story_count_over_time(to_mediacloud(query), start, end,
+                                                collection_ids=COLLECTIONS)
+            break
+        except Exception:
+            if attempt == tries - 1:
+                raise
+            time.sleep(WAIT_SECONDS)
     t = pd.DataFrame(rows, columns=["date", "count", "total_count", "ratio"])
     t["date"] = pd.to_datetime(t["date"])
     return t.rename(columns={"count": "articles", "total_count": "all_articles"})[
