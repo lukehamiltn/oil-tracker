@@ -14,9 +14,12 @@ today's market conditions vs history, and two paper-trading bots on live prices.
 
 All free; government data unless noted.
 
-- **Worldwide news:** the GDELT Project: daily coverage of 8 oil news topics
-  since 2017 (saved in `news_data/timelines.csv`, refreshed daily by
-  `.github/workflows/news.yml`)
+- **Worldwide news:** Media Cloud (mediacloud.org): daily story counts for 8 oil
+  news topics across ~1,800 news sites since 2015 (saved in
+  `news_data/mc_timelines.csv` by `mediacloud_news.py`, refreshed every 3 hours by
+  `.github/workflows/news.yml`; needs a free API key as the `MEDIACLOUD_API_KEY`
+  secret). The older GDELT file (`news_data/timelines.csv`, 2017-Nov 2026) is
+  kept only as a fallback.
 - **Market news:** Benzinga via Alpaca: every story about oil funds and oil
   companies since 2015 (saved in `news_data/market_news/`, one file per month,
   refreshed every 3 hours). Powers the live headlines and the instant search

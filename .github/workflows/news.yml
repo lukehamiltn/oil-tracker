@@ -2,11 +2,13 @@
 # loads it instantly and never has to wait on the news feed:
 #   - every 3 hours: refresh the market news archive (news_data/market_news/,
 #     from Alpaca), which powers the headlines and the search box
-#   - every run: update each topic's worldwide coverage history from GDELT
-#     (news_data/timelines.csv). Only topics not yet up to date are fetched,
-#     and a topic GDELT refuses is retried on the next run.
-# Each step is allowed to fail without stopping the other (GDELT rate-limits
-# heavily); whatever was fetched is still saved.
+#   - every run: update each topic's worldwide coverage history from Media
+#     Cloud (news_data/mc_timelines.csv; needs the MEDIACLOUD_API_KEY secret).
+#     Only topics not yet up to date are fetched; a failed one is retried on
+#     the next run. (The old GDELT file, news_data/timelines.csv, is no longer
+#     updated and is only used if the Media Cloud file is missing.)
+# Each step is allowed to fail without stopping the other; whatever was
+# fetched is still saved.
 
 name: Refresh news data
 
@@ -27,14 +29,15 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - run: pip install pandas==3.1.1 requests==2.34.2
-      - name: Update coverage history
-        # Every run: only topics not yet up to date are fetched, so once all
-        # are done for the day this costs nothing; a topic GDELT refused
-        # earlier is simply tried again 3 hours later.
+      - run: pip install pandas==3.1.1 requests==2.34.2 mediacloud==5.2.0
+      - name: Update worldwide coverage (Media Cloud)
+        # Only topics not yet up to date today are fetched; a topic that fails
+        # is simply tried again on the next run, 3 hours later.
         continue-on-error: true
-        timeout-minutes: 25
-        run: python -u news.py update
+        timeout-minutes: 15
+        env:
+          MEDIACLOUD_API_KEY: ${{ secrets.MEDIACLOUD_API_KEY }}
+        run: python -u mediacloud_news.py update
       - name: Refresh market news
         continue-on-error: true
         env:

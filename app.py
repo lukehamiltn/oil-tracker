@@ -32,6 +32,7 @@ import inventory_events as inv
 import lab_page
 import market_data as md
 import market_news as mn
+import mediacloud_news
 import markets as mk
 import news
 import news_page
@@ -48,7 +49,7 @@ st.set_page_config(page_title="Oil Tracker · oil news and market history",
 # loaded, so new app.py + old ui.py = crash. Reload them (dependencies first)
 # whenever any of them changed on disk, and once when the server starts.
 # ---------------------------------------------------------------------------
-OWN_MODULES = [es, inv, md, fed, fetch_prices, strat, bt, bot, news, flash_sources, mn, mk, ui,
+OWN_MODULES = [es, inv, md, fed, fetch_prices, strat, bt, bot, mediacloud_news, news, flash_sources, mn, mk, ui,
                conditions, lab_page, bot_dashboard, news_page, history_page,
                live_prices, methodology, alerts]
 
@@ -112,7 +113,7 @@ def get_data():
     prices = es.load_prices()                 # Brent: the site's main market
     markets = mk.load_markets()               # Brent, WTI, gasoline, ... (markets.py)
     inv_events = inv.build_events(inv.load_inventories())
-    timelines = news.load_timelines()   # refreshed daily by a GitHub Action
+    timelines = news.load_worldwide()   # Media Cloud, refreshed every 3 hours by a GitHub Action
     archive = mn.load_archive()         # refreshed every 3 hours by a GitHub Action
     market_timelines = mn.topic_timelines(archive)
     gdelt_spikes = mn.add_headlines(news.all_spikes(timelines), archive, mn.topic_match)
@@ -343,7 +344,7 @@ with tab_news:
 st.markdown(
     '<div class="footer"><div><b>Oil Tracker</b> is an independent research project. '
     'Nothing here is investment advice, and past reactions are no guarantee of future ones.</div>'
-    '<div>Data: GDELT Project (worldwide news) · Benzinga via Alpaca (market news) · '
+    '<div>Data: Media Cloud (worldwide news coverage) · Benzinga via Alpaca (market news) · '
     'U.S. EIA · FRED / Federal Reserve · CFTC · Yahoo Finance (live futures prices)</div></div>',
     unsafe_allow_html=True)
 if st.button("How the numbers are worked out →", type="tertiary", key="method_footer"):

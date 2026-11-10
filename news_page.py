@@ -3,7 +3,7 @@ The News page: today's oil news -> similar moments in the past -> what the
 oil market did next.
 
 Two news sources (see news.py and market_news.py):
-  - Worldwide news (GDELT): huge coverage, history since 2017, saved daily.
+  - Worldwide news (Media Cloud): story counts from ~1,800 news sites, since 2015.
   - Market news (Alpaca/Benzinga): financial news since 2015, saved in full,
     so headlines and searches work instantly without asking anyone live.
 """
@@ -24,7 +24,7 @@ import ui
 TOPIC_KEYS = list(news.TOPICS)
 LABELS = {k: t["label"] for k, t in news.TOPICS.items()}
 COLORS = {k: t["color"] for k, t in news.TOPICS.items()}
-SOURCE_NAMES = {"gdelt": "Worldwide news (GDELT, since 2017)",
+SOURCE_NAMES = {"world": "Worldwide news (Media Cloud, since 2015)",
                 "market": "Market news (Benzinga, since 2015)"}
 EXAMPLES = ['"Strait of Hormuz"', "Houthi", "refinery fire", "Abqaiq", "Libya",
             '"price war"', '"rig count"', "hurricane", "Venezuela", "lockdown"]
@@ -40,7 +40,7 @@ SPIKE_TABLE = {
 
 def current_heat(data: dict) -> tuple[pd.DataFrame, str]:
     """Topic heat from worldwide news, or from market news if the worldwide
-    data is more than a few days old (e.g. GDELT blocked the daily update)."""
+    data is more than a few days old (e.g. the update job failed)."""
     return news.heat_now(data["timelines"], data["market_timelines"])
 
 
@@ -83,7 +83,7 @@ def status(heat: float, enough: bool = True) -> tuple[str, str, str]:
 
 
 def coverage_chart(t: pd.DataFrame, spikes: pd.DataFrame, color: str, key: str,
-                   source: str = "gdelt") -> None:
+                   source: str = "world") -> None:
     c = news.coverage(t, source)
     share = c.set_index("date")["share_per_million"]
     if source == "market":       # share of the oil news archive, in %
@@ -183,7 +183,7 @@ def todays_headlines(archive: pd.DataFrame) -> pd.DataFrame:
 def now_view(data: dict) -> None:
     archive = data["archive"]
     heat, heat_source = current_heat(data)
-    results = data["news"][0] if heat_source == "gdelt" else data["market_news"][0]
+    results = data["news"][0] if heat_source == "world" else data["market_news"][0]
 
     # ---- 1. What's in the news now ------------------------------------------
     if not heat.empty:
@@ -392,18 +392,18 @@ def all_topics(data, available) -> None:
     st.markdown("**The same news spikes in every market**")
     ui.cross_market_section(data["react"]["news"], data["typical"], "topic", available,
                             LABELS, key="news_cmp", sig=data["sig"])
-    ui.tip("Based on news spikes in worldwide news coverage (GDELT).", "Source")
+    ui.tip("Based on news spikes in worldwide news coverage (Media Cloud).", "Source")
 
 
 @st.fragment
 def explore_topic(prices, data) -> None:
     topic = ui.topic_picker("Change topic", TOPIC_KEYS, LABELS, COLORS, key="news_topic",
                             default=TOPIC_KEYS[0])
-    source = st.segmented_control("News source", list(SOURCE_NAMES), default="gdelt",
+    source = st.segmented_control("News source", list(SOURCE_NAMES), default="world",
                                   format_func=lambda k: SOURCE_NAMES[k],
-                                  key="news_source") or "gdelt"
-    timelines = data["timelines"] if source == "gdelt" else data["market_timelines"]
-    by_market = data["react"]["news" if source == "gdelt" else "market_news"]
+                                  key="news_source") or "world"
+    timelines = data["timelines"] if source == "world" else data["market_timelines"]
+    by_market = data["react"]["news" if source == "world" else "market_news"]
     market = ui.market_picker("news_topic_market", data["markets"])
     name = mk.MARKETS[market][1]
     results, paths = by_market[market]
@@ -412,7 +412,7 @@ def explore_topic(prices, data) -> None:
         st.info("No data for this topic from this source yet.")
         return
     spikes = results[results["topic"] == topic] if not results.empty else results
-    if source == "gdelt":
+    if source == "world":
         ui.tip(f"`{news.TOPICS[topic]['query']}`", "Search used for worldwide news")
     else:
         ui.tip("Share of all saved oil-market news whose headline matches this topic.")

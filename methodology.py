@@ -30,8 +30,9 @@ def news_method() -> None:
     st.markdown(f"""
 **Two news sources**
 
-- *Worldwide news* (GDELT Project) monitors news outlets around the world. We save a
-  daily count for each topic since 2017.
+- *Worldwide news* comes from Media Cloud, an open news archive run by universities.
+  For each topic we save how many stories matched each day, across about 1,800
+  English-language news sites, since 2015.
 - *Market news* (Benzinga, via Alpaca) covers oil funds and oil companies since 2015.
   Every story is saved with the site, which is why headlines and searches are instant.
 
@@ -43,8 +44,8 @@ the comparison.
 share of coverage (normal = the median of the previous {news.BASELINE_DAYS} days), with
 at least {news.MIN_ARTICLES} articles, and among that topic's busiest 10% of days over
 the previous year. Spikes have to be {news.COOLDOWN_DAYS} or more days apart, hurricane
-spikes only count from June to November, and days when GDELT collected unusually few
-articles are skipped. The market news feed uses the same rules with a lower article
+spikes only count from June to November, and days when the archive collected unusually
+few stories are skipped. The market news feed uses the same rules with a lower article
 minimum, since it carries dozens of oil stories a day rather than thousands.
 
 **Timing.** Reactions are measured from the close one business day *before* the spike,
@@ -82,8 +83,8 @@ two business days before the change took effect.
 {bt.COST_PCT:.2f}% per trade, and were designed on 2007–2016, then tested on 2017 onwards.
 The *supply-scare news* rule buys at the close the day **after** a news spike about tanker
 or facility attacks, Middle East conflict or sanctions (a day's news count is only complete
-after the market has closed) and holds for a week. News history starts in 2017, so it has
-no design period at all.
+after the market has closed) and holds for a week. News history starts in 2015, so its
+design period only covers 2015–2016.
 
 **Spike alerts.** Every 3 hours a job checks each topic's coverage the same way as the
 cards on the News tab. When a topic reaches "Spiking" it sends a push notification
@@ -139,7 +140,7 @@ def sources() -> None:
 | Fed target rate | Federal Reserve via FRED | 1990 |
 | Weekly U.S. crude stocks | U.S. EIA | 2006 |
 | Hedge-fund positioning (managed money, NYMEX WTI) | CFTC Commitments of Traders | 2006 |
-| Worldwide news coverage | GDELT Project | 2017 |
+| Worldwide news coverage | Media Cloud | 2015 |
 | Market news headlines | Benzinga via Alpaca | 2015 |
 | OPEC+ decisions | Hand-checked list | 1999 |
 """)

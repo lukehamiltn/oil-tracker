@@ -78,7 +78,7 @@ def results_table(bt_metrics) -> None:
     period = st.segmented_control("Period", ["Test 2017-now", "Build 2007-2016"],
                                   default="Test 2017-now", key="lab_period") or "Test 2017-now"
     shown = bt_metrics[bt_metrics["period"] == period]
-    # The news rule has no 2007-2016 history (news data starts in 2017)
+    # (The news rule starts in 2015, when the news history does)
     shown = shown[~((shown["strategy"] == "supply_news") & (shown["trades"] == 0))]
     table = shown.set_index("label")[
         ["annual_return_pct", "annual_volatility_pct", "sharpe", "max_drawdown_pct",
@@ -95,7 +95,6 @@ def results_table(bt_metrics) -> None:
         "trades": st.column_config.NumberColumn("Trades"),
     })
     st.caption("Compare each rule with buy-and-hold over the same period. "
-               "**Supply-scare news** only has 2017-now: the news history starts in 2017, so "
-               "its rule (buy the day after a news spike about tanker or facility attacks, "
-               "Middle East conflict or sanctions, and hold for a week) was never fitted to "
-               "any results.")
+               "**Supply-scare news** buys the day after a news spike about tanker or facility "
+               "attacks, Middle East conflict or sanctions, and holds for a week. The news history "
+               "starts in 2015, so its build period only covers 2015–2016.")

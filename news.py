@@ -188,6 +188,14 @@ def update(searches: dict | None = None, path: Path = TIMELINES_PATH) -> bool:
     return all_ok
 
 
+def load_worldwide() -> pd.DataFrame:
+    """Daily topic coverage in worldwide news: Media Cloud (since 2015), or the
+    old GDELT file if the Media Cloud one isn't there."""
+    import mediacloud_news
+    table = mediacloud_news.load()
+    return table if not table.empty else load_timelines()
+
+
 def load_timelines(path: Path = TIMELINES_PATH) -> pd.DataFrame:
     if not path.exists():
         return pd.DataFrame({"topic": pd.Series(dtype=str), "date": pd.Series(dtype="datetime64[ns]"),
@@ -200,12 +208,14 @@ def load_timelines(path: Path = TIMELINES_PATH) -> pd.DataFrame:
 # lower article minimum and an average (not median) baseline - a median of
 # mostly-zero days would be zero.
 SOURCES = {
-    "gdelt": {"min_articles": MIN_ARTICLES, "baseline": "median", "skip_outages": True},
+    # Worldwide news (Media Cloud; GDELT only as a fallback). Media Cloud counts
+    # fewer stories per topic than GDELT did, so a spike needs 10 stories, not 20.
+    "world": {"min_articles": 10, "baseline": "median", "skip_outages": True},
     "market": {"min_articles": 4, "baseline": "mean", "skip_outages": False},
 }
 
 
-def coverage(t: pd.DataFrame, source: str = "gdelt") -> pd.DataFrame:
+def coverage(t: pd.DataFrame, source: str = "world") -> pd.DataFrame:
     """Add each day's share of all news, the 'normal' share and the ratio."""
     settings = SOURCES[source]
     t = t.sort_values("date").copy()
@@ -224,7 +234,7 @@ def coverage(t: pd.DataFrame, source: str = "gdelt") -> pd.DataFrame:
     return t
 
 
-def find_spikes(t: pd.DataFrame, category: str = "topic", source: str = "gdelt",
+def find_spikes(t: pd.DataFrame, category: str = "topic", source: str = "world",
                 min_articles: int | None = None) -> pd.DataFrame:
     """One event per news spike, in the same shape as the other event studies.
 
@@ -261,14 +271,14 @@ def find_spikes(t: pd.DataFrame, category: str = "topic", source: str = "gdelt",
                                        "articles", "description"])
 
 
-def all_spikes(timelines: pd.DataFrame, source: str = "gdelt") -> pd.DataFrame:
+def all_spikes(timelines: pd.DataFrame, source: str = "world") -> pd.DataFrame:
     parts = [find_spikes(group, source=source) for _, group in timelines.groupby("topic")]
     if not parts:
         return find_spikes(timelines.assign(topic="none")).iloc[0:0]
     return pd.concat(parts, ignore_index=True).sort_values("date").reset_index(drop=True)
 
 
-def current_heat(timelines: pd.DataFrame, source: str = "gdelt") -> pd.DataFrame:
+def current_heat(timelines: pd.DataFrame, source: str = "world") -> pd.DataFrame:
     """For each topic: coverage over the last 3 days vs normal."""
     rows = []
     for key, group in timelines.groupby("topic"):
@@ -304,9 +314,9 @@ def heat_now(timelines: pd.DataFrame, market_timelines: pd.DataFrame) -> tuple[p
     heat = current_heat(timelines)
     today = pd.Timestamp.now(tz="UTC").tz_localize(None).normalize()
     if not heat.empty and heat["last_day"].max() >= today - pd.Timedelta(days=4):
-        return heat, "gdelt"
+        return heat, "world"
     market = current_heat(market_timelines, "market")
-    return (market, "market") if not market.empty else (heat, "gdelt")
+    return (market, "market") if not market.empty else (heat, "world")
 
 
 # ---------------------------------------------------------------------------

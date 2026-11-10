@@ -2,7 +2,7 @@
 Market news: an archive of oil-related financial news since 2015, from
 Alpaca's news feed (mostly Benzinga). It uses the same Alpaca keys as the bots.
 
-Why this exists alongside GDELT (news.py): GDELT covers the whole world's
+Why this exists alongside worldwide news (Media Cloud): that covers the whole world's
 news but rate-limits hard, so the website can't ask it anything live. Alpaca
 allows 200 requests a minute on our own keys, and its archive is small
 enough (~5-40 oil articles a day) to save in full. That makes the website's
@@ -177,7 +177,7 @@ def load_archive() -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
-# Daily counts (same shape as GDELT's timelines, so news.find_spikes works)
+# Daily counts (same shape as the worldwide timelines, so news.find_spikes works)
 # ---------------------------------------------------------------------------
 def counts(archive: pd.DataFrame, match: pd.Series, name: str) -> pd.DataFrame:
     """Daily number of matching articles and of all articles in the archive."""

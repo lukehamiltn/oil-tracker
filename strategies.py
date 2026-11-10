@@ -8,7 +8,7 @@ to the day it became available:
   - CFTC positioning: as of Tuesday, released Friday 3:30pm ET (after oil
     futures close) -> usable from the following Monday's close
   - Dollar index: published weekly by the Fed -> treated as usable 7 days later
-  - News spikes (GDELT): a day's coverage is complete at midnight UTC (7pm ET,
+  - News spikes (Media Cloud): a day's coverage is complete at midnight UTC (7pm ET,
     after the close) -> usable from the NEXT trading day's close
 
 Every strategy returns a "position" for each day: 1 = own oil, 0 = in cash.
@@ -95,9 +95,9 @@ def build_features(prices: pd.Series | None = None) -> pd.DataFrame:
     # --- Dollar ------------------------------------------------------------
     f["dollar_vs_50d_pct"] = dollar_trend(md.load_dollar(), days)
 
-    # --- News spikes about supply threats (GDELT, from 2017) -----------------
+    # --- News spikes about supply threats (worldwide news, from 2015) -------
     f["supply_news"] = None
-    spikes = news.all_spikes(news.load_timelines())
+    spikes = news.all_spikes(news.load_worldwide())
     spikes = spikes[spikes["topic"].isin(SUPPLY_TOPICS)]
     if len(spikes):
         # first trading day strictly AFTER the spike day (its coverage is only
@@ -107,7 +107,7 @@ def build_features(prices: pd.Series | None = None) -> pd.DataFrame:
         topic = pd.Series(spikes["topic"].values[ok], index=days[usable[ok]])
         topic = topic[~topic.index.duplicated(keep="last")]
         f["supply_news"] = topic.reindex(days)
-    f.attrs["news_start"] = news.load_timelines()["date"].min()
+    f.attrs["news_start"] = news.load_worldwide()["date"].min()
     return f
 
 
@@ -154,8 +154,8 @@ def weak_dollar(f: pd.DataFrame) -> pd.Series:
 def supply_news(f: pd.DataFrame, hold_days: int = 5) -> pd.Series:
     """After a news spike about a supply threat (tanker or facility attacks,
     Middle East conflict, sanctions), buy at the next close and hold for a
-    week (5 trading days). News history starts in 2017, so this rule has no
-    'build' period: everything it shows is out-of-sample."""
+    week (5 trading days). News history starts in 2015, so its 'build'
+    period only covers 2015-2016."""
     signal = f["supply_news"].notna().astype(float)
     position = signal.rolling(hold_days, min_periods=1).max()
     start = f.attrs.get("news_start")

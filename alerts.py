@@ -99,7 +99,7 @@ def main(dry_run: bool = False) -> None:
     fetch_prices.main()
     markets = mk.load_markets()
     sig = mk.Significance(markets)
-    spikes = news.all_spikes(timelines) if source == "gdelt" else \
+    spikes = news.all_spikes(timelines) if source == "world" else \
         news.all_spikes(mn.topic_timelines(archive), "market")
     by_market = mk.reactions(markets, spikes)
 
