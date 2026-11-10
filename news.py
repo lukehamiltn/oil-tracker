@@ -103,8 +103,8 @@ TOPICS = {
 _last_request = [0.0]
 
 
-def gdelt(params: dict, tries: int = 5, spacing: float = 6, timeout: float = 120,
-          backoff: float = 30) -> dict:
+def gdelt(params: dict, tries: int = 3, spacing: float = 6, timeout: float = 120,
+          backoff: float = 45) -> dict:
     """Call GDELT politely, waiting out its rate limits. Only the daily
     GitHub job calls this; the website never asks GDELT anything live."""
     for attempt in range(tries):
@@ -150,7 +150,9 @@ def update(searches: dict | None = None, path: Path = TIMELINES_PATH) -> bool:
     Searches already saved only fetch the last 3 weeks (recent days get revised
     as GDELT finishes counting); new ones fetch the full history. Progress is
     saved after each one, so an interrupted run resumes where it stopped.
-    Returns False if GDELT's rate limit stopped the run early."""
+    If GDELT refuses one search (rate limit), we move on to the next; the job
+    runs every 3 hours, so a refused search is retried soon.
+    Returns False if any search was refused."""
     if searches is None:
         searches = {k: (t["label"], t["query"]) for k, t in TOPICS.items()}
     path.parent.mkdir(exist_ok=True)
@@ -160,6 +162,7 @@ def update(searches: dict | None = None, path: Path = TIMELINES_PATH) -> bool:
     # Missing searches first (they matter most), then ones not refreshed today
     missing = [k for k in searches if k not in last_saved]
     stale = [k for k in searches if k in last_saved and last_saved[k] < today]
+    all_ok = True
     for key in missing + stale:
         label, query = searches[key]
         if key in missing:
@@ -169,9 +172,10 @@ def update(searches: dict | None = None, path: Path = TIMELINES_PATH) -> bool:
         print(f"Fetching {kind}: {label}...")
         try:
             fresh = timeline(query, start=start, spacing=10)
-        except RuntimeError as error:
-            print(f"  {error} Stopping here; progress so far is saved.")
-            return False
+        except (RuntimeError, requests.RequestException) as error:
+            print(f"  Skipped for now ({error}); the next run will try again.")
+            all_ok = False
+            continue
         if fresh.empty:
             print("  (no data returned - keeping what we had)")
             continue
@@ -179,8 +183,9 @@ def update(searches: dict | None = None, path: Path = TIMELINES_PATH) -> bool:
         keep = table[~((table["topic"] == key) & (table["date"] >= fresh["date"].min()))]
         table = pd.concat([keep, fresh], ignore_index=True).sort_values(["topic", "date"])
         table.to_csv(path, index=False, date_format="%Y-%m-%d")
-    print(f"Saved {len(table):,} rows to {path}")
-    return True
+    print(f"Saved {len(table):,} rows to {path}"
+          + ("" if all_ok else " (some searches were refused and will be retried)"))
+    return all_ok
 
 
 def load_timelines(path: Path = TIMELINES_PATH) -> pd.DataFrame:

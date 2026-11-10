@@ -2,8 +2,9 @@
 # loads it instantly and never has to wait on the news feed:
 #   - every 3 hours: refresh the market news archive (news_data/market_news/,
 #     from Alpaca), which powers the headlines and the search box
-#   - once a day (and on manual runs): update each topic's worldwide coverage
-#     history from GDELT (news_data/timelines.csv)
+#   - every run: update each topic's worldwide coverage history from GDELT
+#     (news_data/timelines.csv). Only topics not yet up to date are fetched,
+#     and a topic GDELT refuses is retried on the next run.
 # Each step is allowed to fail without stopping the other (GDELT rate-limits
 # heavily); whatever was fetched is still saved.
 
@@ -28,8 +29,11 @@ jobs:
           python-version: "3.12"
       - run: pip install pandas==3.1.1 requests==2.34.2
       - name: Update coverage history
-        if: github.event_name == 'workflow_dispatch' || github.event.schedule == '15 6 * * *'
+        # Every run: only topics not yet up to date are fetched, so once all
+        # are done for the day this costs nothing; a topic GDELT refused
+        # earlier is simply tried again 3 hours later.
         continue-on-error: true
+        timeout-minutes: 25
         run: python -u news.py update
       - name: Refresh market news
         continue-on-error: true
