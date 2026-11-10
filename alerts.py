@@ -83,7 +83,7 @@ def main(dry_run: bool = False) -> None:
     timelines = news.load_timelines()
     archive = mn.load_archive()
     heat, source = news.heat_now(timelines, mn.topic_timelines(archive))
-    hot = heat[heat["heat"] >= news.SPIKE_RATIO]
+    hot = heat[(heat["heat"] >= news.SPIKE_RATIO) & heat["enough"]]
     print(f"Coverage from {source}: " + ", ".join(
         f"{r.topic} {r.heat:.1f}x" for r in heat.itertuples()))
     state = load_state()

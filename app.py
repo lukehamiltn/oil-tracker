@@ -23,6 +23,7 @@ import conditions
 import event_study as es
 import fed_events as fed
 import fetch_prices
+import flash_sources
 import history_page
 import alerts
 import live_prices
@@ -47,7 +48,7 @@ st.set_page_config(page_title="Oil Tracker · oil news and market history",
 # loaded, so new app.py + old ui.py = crash. Reload them (dependencies first)
 # whenever any of them changed on disk, and once when the server starts.
 # ---------------------------------------------------------------------------
-OWN_MODULES = [es, inv, md, fed, fetch_prices, strat, bt, bot, news, mn, mk, ui,
+OWN_MODULES = [es, inv, md, fed, fetch_prices, strat, bt, bot, news, flash_sources, mn, mk, ui,
                conditions, lab_page, bot_dashboard, news_page, history_page,
                live_prices, methodology, alerts]
 
@@ -184,10 +185,13 @@ def price_card(label: str, market: str) -> tuple:
 def header_cards() -> None:
     heat, _ = news_page.current_heat(data)
     n_events = sum(len(data[k][0]) for k in ("opec", "inventory", "fed", "news"))
+    busy = heat[heat["enough"]] if not heat.empty else heat
     if heat.empty:
         story = ("Biggest oil story now", "—", "news data loading", None)
+    elif busy.empty:
+        story = ("Biggest oil story now", "No topic stands out", "a quiet news day", None)
     else:
-        top = heat.iloc[0]
+        top = busy.iloc[0]
         note = (f"{top['heat']:.1f}× its normal news coverage" if top["heat"] >= 1.5
                 else f"quiet news day: top topic at {top['heat']:.1f}× normal")
         story = ("Biggest oil story now", top["label"], note, None)

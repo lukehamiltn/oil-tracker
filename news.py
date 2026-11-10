@@ -270,16 +270,26 @@ def current_heat(timelines: pd.DataFrame, source: str = "gdelt") -> pd.DataFrame
         c = coverage(group, source)
         if c.empty:
             continue
-        recent = c.tail(3)
+        # The last 3 usable days within the past week (days skipped as GDELT
+        # collection outages don't count, so one bad day can't hide a topic)
+        usable = c[c["share_per_million"].notna()]
+        recent = usable[usable["date"] >= c["date"].iloc[-1] - pd.Timedelta(days=7)].tail(3)
+        if recent.empty:
+            continue
         normal = c["normal"].iloc[-1]
         ratio = recent["share_per_million"].mean() / normal if normal else float("nan")
         if pd.isna(ratio):          # not enough history to say what's normal
             continue
+        articles = int(recent["articles"].sum())
         rows.append({"topic": key, "label": TOPICS[key]["label"], "heat": ratio,
-                     "articles_3d": int(recent["articles"].sum()),
+                     "articles_3d": articles,
+                     # too few articles for the ratio to mean anything (one
+                     # story on a quiet day can look like "6x normal")
+                     "enough": articles >= SOURCES[source]["min_articles"],
                      "last_day": c["date"].iloc[-1]})
-    columns = ["topic", "label", "heat", "articles_3d", "last_day"]
-    return pd.DataFrame(rows, columns=columns).sort_values("heat", ascending=False)
+    columns = ["topic", "label", "heat", "articles_3d", "enough", "last_day"]
+    return pd.DataFrame(rows, columns=columns).sort_values(["enough", "heat"],
+                                                           ascending=[False, False])
 
 
 def heat_now(timelines: pd.DataFrame, market_timelines: pd.DataFrame) -> tuple[pd.DataFrame, str]:

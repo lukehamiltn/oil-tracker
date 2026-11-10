@@ -15,6 +15,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 import event_study as es
+import flash_sources
 import market_news as mn
 import markets as mk
 import news
@@ -70,8 +71,10 @@ def search_archive(query: str, _archive: pd.DataFrame, _markets: dict):
     return t, mk.reactions(_markets, spikes), recent
 
 
-def status(heat: float) -> tuple[str, str, str]:
+def status(heat: float, enough: bool = True) -> tuple[str, str, str]:
     """Label, colour and card background tint."""
+    if not enough:            # too few articles to call it busy or quiet
+        return "Quiet", "#898781", "#f7f7f5"
     if heat >= news.SPIKE_RATIO:
         return "Spiking", "#e34948", "#fdf3f2"
     if heat >= 1.5:
@@ -117,9 +120,10 @@ def headline_list(heads: pd.DataFrame) -> None:
             # A one-line newswire flash: the headline is the whole story, and
             # the source page is empty, so point to other outlets' coverage
             body = (f'<span class="flash-title">{title}</span>')
-            extra = (f' · <span class="flash">Newswire flash</span> · '
-                     f'<a class="more" href="{html.escape(mn.coverage_url(h["headline"]))}" '
-                     f'target="_blank">Find coverage ↗</a>')
+            more = " · ".join(
+                f'<a class="more" href="{html.escape(url)}" target="_blank">{html.escape(label)} ↗</a>'
+                for label, url in flash_sources.links(h["headline"], h["time"]))
+            extra = f' · <span class="flash">Newswire flash</span> · {more}' 
         else:
             body = (f'<a href="{html.escape(h["url"])}" target="_blank">{title}</a>'
                     f'<div class="summary">{html.escape(h["summary"])}</div>')
@@ -193,7 +197,7 @@ def now_view(data: dict) -> None:
             if i % 4 == 0:        # a fresh row of columns, so cards in a row match heights
                 cols = st.columns(4)
             past = results[results["topic"] == row["topic"]]
-            label, color, tint = status(row["heat"])
+            label, color, tint = status(row["heat"], row["enough"])
             key = f"heat_card_{row['topic']}"
             # every card: a faint background in its status colour, plus a
             # coloured top edge that appears on hover
@@ -201,12 +205,14 @@ def now_view(data: dict) -> None:
                             f".st-key-{key}:hover {{ box-shadow: inset 0 4px 0 {color}; }}")
             with cols[i % 4].container(border=True, height="stretch", key=key):
                 # Now: how loud is this story?
-                number_color = "#1d1d1b" if label == "Normal" else color
+                number_color = color if label in ("Spiking", "Elevated") else "#1d1d1b"
                 st.markdown(
                     ui.status_line(label, color, pulse=label == "Spiking")
                     + f"<div class='card-title'>{row['label']}</div>"
                     + f"<span class='heat-num' style='color:{number_color}'>{row['heat']:.1f}×</span>"
-                    + " <span class='heat-unit'>normal coverage</span>"
+                    + (" <span class='heat-unit'>normal coverage</span>" if row["enough"] else
+                       f" <span class='heat-unit'>normal · only {row['articles_3d']} "
+                       f"article{'s' if row['articles_3d'] != 1 else ''}</span>")
                     + ui.heat_gauge(row["heat"], color),
                     unsafe_allow_html=True)
                 # History: what happened after past spikes, and is it real?

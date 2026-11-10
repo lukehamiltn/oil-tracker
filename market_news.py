@@ -31,6 +31,7 @@ from pathlib import Path
 import pandas as pd
 import requests
 
+import flash_sources
 import news
 
 NEWS_URL = "https://data.alpaca.markets/v1beta1/news"
@@ -110,15 +111,12 @@ def is_flash(summary) -> bool:
     return not isinstance(summary, str) or not summary.strip()
 
 
-def coverage_url(headline: str) -> str:
-    """A news search for the same story, for flashes that have no article."""
-    return "https://news.google.com/search?q=" + quote(headline[:150])
-
-
 def read_url(row) -> str:
     """Where a reader should go for a story: the article, or for a flash,
-    other outlets' coverage of it."""
-    return coverage_url(row["headline"]) if is_flash(row["summary"]) else row["url"]
+    the source it cites (or a web search for it) - see flash_sources.py."""
+    if not is_flash(row["summary"]):
+        return row["url"]
+    return flash_sources.links(row["headline"], row["time"])[0][1]
 
 
 def to_table(rows: list[dict]) -> pd.DataFrame:
