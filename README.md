@@ -89,6 +89,10 @@ The site itself is visited every hour by `.github/workflows/keep_awake.yml`
 (`scripts/keep_awake.py`), so Streamlit Cloud never puts it to sleep and
 real visitors don't wait for it to start up.
 
+**Health check:** every 3 hours `.github/workflows/health.yml` runs
+`scripts/health_check.py`, which opens the live site, clicks every tab and checks the
+data is fresh. If anything is wrong the job fails and GitHub emails the owner.
+
 **Spike alerts:** every 3 hours `.github/workflows/alerts.yml` runs `alerts.py`,
 which sends a push notification to the ntfy.sh channel `oiltracker-q7rq-alerts`
 when a news topic starts spiking (subscribe at https://ntfy.sh/oiltracker-q7rq-alerts

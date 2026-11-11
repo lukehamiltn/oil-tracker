@@ -1,0 +1,32 @@
+# Every 3 hours, opens the live site in a headless browser, clicks through
+# every tab and checks the data is fresh (scripts/health_check.py).
+#
+# If something is wrong this job FAILS, and GitHub emails the repository
+# owner about the failed run. Optional: add a secret HEALTH_NTFY_CHANNEL with
+# a private ntfy channel name to also get a push notification.
+
+name: Site health check
+
+on:
+  schedule:
+    - cron: "40 */3 * * *"
+  workflow_dispatch:         # adds a "Run workflow" button
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install playwright==1.55.0 pandas==3.1.1 requests==2.34.2
+      - run: python -m playwright install --with-deps chromium
+      - name: Check the site
+        env:
+          HEALTH_NTFY_CHANNEL: ${{ secrets.HEALTH_NTFY_CHANNEL }}
+        run: python scripts/health_check.py
