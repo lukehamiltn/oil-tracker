@@ -66,6 +66,11 @@ h3 { letter-spacing: -0.005em; }
     font-weight: 700; color: #52514e; }
 .headline .meta a.more { color: #1f4e8c; font-weight: 500; }
 .headline .publisher { color: #1d1d1b; font-weight: 600; }
+.headline .history { font-size: 0.8rem; color: #52514e; margin-top: 0.25rem;
+    padding: 0.2rem 0.55rem; background: #f6f5f1; border-left: 3px solid #1f3a5f;
+    border-radius: 0 4px 4px 0; display: inline-block; }
+.headline .history a { color: #1f4e8c; font-weight: 600; text-decoration: none; }
+.headline .history a:hover { text-decoration: underline; }
 .headline.flash-row { padding: 0.4rem 0; }
 .headline.flash-row .flash-title { font-size: 0.92rem; }
 .chip { display: inline-block; font-size: 0.72rem; font-weight: 600; padding: 0.08rem 0.5rem;

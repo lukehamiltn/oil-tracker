@@ -12,6 +12,7 @@ News sources:
 """
 
 import html
+from urllib.parse import quote
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -159,9 +160,11 @@ def coverage_chart(t: pd.DataFrame, spikes: pd.DataFrame, color: str, key: str,
 
 
 def _ago(time: pd.Timestamp) -> str:
-    hours = max(int((pd.Timestamp.now(tz="UTC") - time).total_seconds() // 3600), 0)
-    if hours < 1:
-        return "just now"
+    seconds = max((pd.Timestamp.now(tz="UTC") - time).total_seconds(), 0)
+    if seconds < 3600:
+        minutes = int(seconds // 60)
+        return "just now" if minutes < 2 else f"{minutes} min ago"
+    hours = int(seconds // 3600)
     return f"{hours}h ago" if hours < 48 else f"{time:%b %d, %Y}"
 
 
@@ -170,13 +173,42 @@ def _link(label: str, url: str, cls: str = "more") -> str:
             f'rel="noopener">{html.escape(label)} ↗</a>')
 
 
-def headline_list(heads: pd.DataFrame) -> None:
+MIN_PAST = 3      # past matches needed before a "Last time" line is shown
+
+
+def history_line(h, data: dict) -> str:
+    """'Last time: 8 similar stories -> Brent -1.4% a week later (could be noise)
+    - See them', linking to this story in Like this before. Empty if there
+    aren't enough close matches (better no line than a misleading one)."""
+    archive = data["archive"]
+    if archive.empty:
+        return ""
+    before = (pd.Timestamp(h["time"]) - pd.Timedelta(days=14)).floor("h")
+    version = f"{len(archive)}-{archive['time'].max()}"
+    by_market = past_matches(h["headline"], before, archive, data["markets"], version)
+    results = by_market.get("BRENT", (pd.DataFrame(), {}))[0]
+    week = results["day_5_pct"].dropna() if not results.empty else pd.Series(dtype=float)
+    if len(week) < MIN_PAST:
+        return ""
+    verdict = data["sig"].check("BRENT", 5, week)
+    text, color = mk.VERDICTS[verdict]
+    tone = "#1d1d1b" if verdict in ("strong", "possible") else ui.MUTED
+    link = "?like=" + quote(h["headline"][:300])
+    return (f'<div class="history">Last time: {len(week)} similar stories → Brent '
+            f'<b style="color:{tone}">{week.mean():+.1f}%</b> a week later · '
+            f'<span style="color:{color}">{text.lower()}</span> · '
+            f'<a href="{link}" target="_self">See them →</a></div>')
+
+
+def headline_list(heads: pd.DataFrame, data: dict | None = None) -> None:
     """Articles: headline (links to the article), summary, publisher and time.
     Newswire flashes have no article, so they show the full headline with
-    links to matching coverage, the source they cite, or a short web search."""
+    links to matching coverage, the source they cite, or a short web search.
+    With `data`, each story also gets a "Last time" line from past news."""
     _search_words(str(len(mn.load_archive())))
     rows = []
     for _, h in heads.iterrows():
+        past = history_line(h, data) if data is not None else ""
         chips = "".join(ui.chip(LABELS[t], COLORS[t]) for t in h["topics"])
         title = html.escape(h["headline"])
         source = f'<span class="publisher">{html.escape(_display_source(h["source"]))}</span>'
@@ -193,13 +225,14 @@ def headline_list(heads: pd.DataFrame) -> None:
             label = "Coverage" if coverage else "Read more"
             rows.append(f'<div class="headline flash-row"><span class="flash-title">{title}</span>'
                         f'<div class="meta">{chips}{source} newswire · {_ago(h["time"])}'
-                        f' · <span class="flash">{label}:</span> {" · ".join(links)}</div></div>')
+                        f' · <span class="flash">{label}:</span> {" · ".join(links)}</div>'
+                        f'{past}</div>')
         else:
             summary = (f'<div class="summary">{html.escape(h["summary"])}</div>'
                        if isinstance(h["summary"], str) and h["summary"] else "")
             rows.append(f'<div class="headline"><a href="{html.escape(h["url"])}" target="_blank" '
                         f'rel="noopener">{title}</a>{summary}<div class="meta">{chips}'
-                        f'{source} · {_ago(h["time"])}</div></div>')
+                        f'{source} · {_ago(h["time"])}</div>{past}</div>')
     st.markdown("".join(rows), unsafe_allow_html=True)
 
 
@@ -223,6 +256,12 @@ def render(prices: pd.Series, data: dict) -> None:
     """The News tab, split into four views picked from a row of buttons, so
     each fits on a screen or two (a fragment: switching only redraws this tab)."""
     st.session_state.setdefault("news_view", "now")    # (the jump button can change it)
+    # A "See them ->" link under a headline opens that story in Like this before
+    asked = st.query_params.get("like")
+    if asked:
+        st.session_state["news_view"] = "like"
+        st.session_state["like_typed"] = asked
+        del st.query_params["like"]
     view = st.segmented_control("Section", list(VIEWS), key="news_view",
                                 format_func=VIEWS.get, label_visibility="collapsed") or "now"
     st.write("")
@@ -314,13 +353,14 @@ def now_view(data: dict) -> None:
     # ---- 2. Latest headlines ---------------------------------------------------
     st.subheader("Latest headlines", anchor=False)
     heads, is_live = latest_headlines(archive)
-    headlines_section(heads, is_live, archive)
+    headlines_section(heads, is_live, archive, data)
     st.button("Has a story like one of these happened before? →", type="tertiary",
               key="to_like", on_click=lambda: st.session_state.update(news_view="like"))
 
 
 @st.fragment
-def headlines_section(heads: pd.DataFrame, is_live: bool, archive: pd.DataFrame) -> None:
+def headlines_section(heads: pd.DataFrame, is_live: bool, archive: pd.DataFrame,
+                      data: dict) -> None:
     """Today's headlines, or - when a topic is picked - the latest stories of
     that kind, going back through the archive if today was quiet."""
     topic = ui.topic_picker("Filter by topic", TOPIC_KEYS, LABELS, COLORS, key="headline_topic",
@@ -348,7 +388,7 @@ def headlines_section(heads: pd.DataFrame, is_live: bool, archive: pd.DataFrame)
         if topic:
             st.caption(f"The latest stories tagged *{LABELS[topic]}*, newest first, going "
                        f"back to {shown['time'].min():%b %d, %Y}.")
-        headline_list(shown)
+        headline_list(shown, data)
         ui.tip(f"Articles from {articles['source'].nunique()} publishers' news feeds "
                "(energy press, shipping, world and Middle East news), newest first, at most "
                "three per publisher. Click a headline to read the full article on the "
@@ -357,7 +397,7 @@ def headlines_section(heads: pd.DataFrame, is_live: bool, archive: pd.DataFrame)
     if len(flashes):
         st.markdown("<div class='eyebrow' style='margin-top:1.2rem'>From the newswire</div>",
                     unsafe_allow_html=True)
-        headline_list(flashes.head(10))
+        headline_list(flashes.head(10), data)
         ui.tip("Benzinga newswire flashes are one-line headlines with no article behind "
                "them. Where other outlets have covered the same story, we link to their "
                "articles; otherwise to the source the flash cites, or a short web search.",

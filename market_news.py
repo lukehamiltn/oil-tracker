@@ -263,16 +263,36 @@ def build_matcher(archive: pd.DataFrame):
     return pool, vectorizer, matrix
 
 
+# Words too common in oil news to show two stories are about the same thing
+_BROAD = set("""oil oils crude prices price brent wti barrel barrels market markets stock
+stocks energy gas fuel global world week weeks day today report reports news says said
+shares company companies trade trading looms loom""".split())
+
+
+def _specific_words(text: str) -> set[str]:
+    from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS   # (only the site needs this)
+    words = set(re.findall(r"[a-z][a-z0-9'\-]+", text.lower()))
+    return {w.strip("'") for w in words
+            if len(w) > 2 and w not in _BROAD and w not in flash_sources.FILLER
+            and w not in flash_sources.GENERIC and w not in ENGLISH_STOP_WORDS}
+
+
 def similar(matcher, text: str, before: pd.Timestamp, n: int = 10,
-            min_score: float = 0.15, gap_days: int = 7) -> pd.DataFrame:
+            min_score: float = 0.2, gap_days: int = 7) -> pd.DataFrame:
     """The n past stories most similar to `text`, published before `before`,
-    at least gap_days apart (so one story can't fill the list)."""
+    at least gap_days apart (so one story can't fill the list). Each match must
+    also share at least one specific word with `text` (a name, a place, a
+    thing - not "oil", "prices" or "looms"), so a match on wording alone
+    doesn't count."""
     pool, vectorizer, matrix = matcher
     scores = (matrix @ vectorizer.transform([text + " " + text]).T).toarray().ravel()
     found = pool.assign(score=scores)
     found = found[(found["score"] >= min_score) & (found["time"] < before)]
+    mine = _specific_words(text)
     picked = []
     for _, row in found.sort_values("score", ascending=False).iterrows():
+        if not mine & _specific_words(row["headline"]):
+            continue
         if all(abs((row["day"] - p["day"]).days) >= gap_days for p in picked):
             picked.append(row)
         if len(picked) == n:
