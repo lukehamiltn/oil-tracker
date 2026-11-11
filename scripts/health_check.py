@@ -131,6 +131,15 @@ def check_data() -> list[str]:
         print(f"  {name.lower()}: newest {age:.0f}h old")
         if age > hours:
             problems.append(f"{name}: newest saved story is {age:.0f} hours old.")
+    # The hand-kept calendar of OPEC+ meetings and Fed decisions
+    calendar = ROOT / "events" / "upcoming.csv"
+    if calendar.exists():
+        cal = pd.read_csv(calendar, parse_dates=["date"])
+        ahead = cal[cal["date"] >= now.tz_localize(None).normalize()]
+        for kind, name in [("opec", "OPEC+ meeting"), ("fed", "Fed decision")]:
+            if not (ahead["kind"] == kind).any():
+                problems.append(f"Calendar: no upcoming {name} dates - add the next ones to "
+                                "events/upcoming.csv.")
     return problems
 
 

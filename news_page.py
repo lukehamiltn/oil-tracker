@@ -187,7 +187,7 @@ def history_line(h, data: dict) -> str:
     if archive.empty:
         return ""
     before = (pd.Timestamp(h["time"]) - pd.Timedelta(days=14)).floor("h")
-    version = f"{len(archive)}-{archive['time'].max()}"
+    version = f"{len(archive)}-{archive['time'].max()}-{len(feed_archive())}"
     by_market = past_matches(h["headline"], before, archive, data["markets"], version)
     results = by_market.get("BRENT", (pd.DataFrame(), {}))[0]
     week = results["day_5_pct"].dropna() if not results.empty else pd.Series(dtype=float)
@@ -557,7 +557,14 @@ MATCH_TABLE = {
 @st.cache_resource(show_spinner="Indexing past headlines...", max_entries=1)
 def matcher(_archive: pd.DataFrame, version: str):
     """Built once per archive version (it changes when new news is saved);
-    only the newest version is kept in memory."""
+    only the newest version is kept in memory. Past stories come from the
+    Benzinga archive plus the saved publisher articles (news_feeds), so as that
+    archive grows, matches include real articles from many outlets."""
+    articles = feed_archive()
+    if not articles.empty:
+        articles = articles.assign(
+            day=articles["time"].dt.tz_convert(mn.MARKET_TZ).dt.tz_localize(None).dt.normalize())
+        _archive = pd.concat([_archive, articles], ignore_index=True).drop_duplicates("headline")
     return mn.build_matcher(_archive)
 
 
@@ -620,7 +627,7 @@ def like_this_before(data, archive, heads) -> None:
         if len(row):
             before = row["time"].iloc[0] - pd.Timedelta(days=14)
     before = before.floor("h")
-    version = f"{len(archive)}-{archive['time'].max()}"
+    version = f"{len(archive)}-{archive['time'].max()}-{len(feed_archive())}"
     by_market = past_matches(text, before, archive, data["markets"], version)
     results, paths = by_market.get("BRENT", (pd.DataFrame(), {}))
     if results.empty:

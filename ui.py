@@ -95,6 +95,8 @@ h3 { letter-spacing: -0.005em; }
   /* topic cards: no reserved second line when a title fits on one */
   .card-title { height: auto !important; -webkit-line-clamp: unset; }
   .past { min-height: 0 !important; }
+  /* Coming up: one card per row */
+  .kpi-row:has(.upcoming) { grid-template-columns: 1fr !important; }
 }
 .kpi { border: 1px solid #e1e0d9; border-radius: 0.5rem; padding: 0.9rem 1rem; background: #ffffff; }
 .kpi-label { font-size: 0.85rem; color: #52514e; }
