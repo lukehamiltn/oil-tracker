@@ -33,6 +33,7 @@ import lab_page
 import market_data as md
 import market_news as mn
 import mediacloud_news
+import news_feeds
 import markets as mk
 import news
 import news_page
@@ -49,7 +50,7 @@ st.set_page_config(page_title="Oil Tracker · oil news and market history",
 # loaded, so new app.py + old ui.py = crash. Reload them (dependencies first)
 # whenever any of them changed on disk, and once when the server starts.
 # ---------------------------------------------------------------------------
-OWN_MODULES = [es, inv, md, fed, fetch_prices, strat, bt, bot, mediacloud_news, news, flash_sources, mn, mk, ui,
+OWN_MODULES = [es, inv, md, fed, fetch_prices, strat, bt, bot, mediacloud_news, news, news_feeds, flash_sources, mn, mk, ui,
                conditions, lab_page, bot_dashboard, news_page, history_page,
                live_prices, methodology, alerts]
 
@@ -344,7 +345,7 @@ with tab_news:
 st.markdown(
     '<div class="footer"><div><b>Oil Tracker</b> is an independent research project. '
     'Nothing here is investment advice, and past reactions are no guarantee of future ones.</div>'
-    '<div>Data: Media Cloud (worldwide news coverage) · Benzinga via Alpaca (market news) · '
+    '<div>Data: news articles from about 30 publishers’ news feeds · Media Cloud (worldwide news coverage) · Benzinga via Alpaca (newswire) · '
     'U.S. EIA · FRED / Federal Reserve · CFTC · Yahoo Finance (live futures prices)</div></div>',
     unsafe_allow_html=True)
 if st.button("How the numbers are worked out →", type="tertiary", key="method_footer"):

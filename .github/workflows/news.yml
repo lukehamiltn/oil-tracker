@@ -38,6 +38,10 @@ jobs:
         env:
           MEDIACLOUD_API_KEY: ${{ secrets.MEDIACLOUD_API_KEY }}
         run: python -u mediacloud_news.py update
+      - name: Save articles from the publishers' news feeds
+        continue-on-error: true
+        timeout-minutes: 5
+        run: python -u news_feeds.py update
       - name: Refresh market news
         continue-on-error: true
         env:

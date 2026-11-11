@@ -76,20 +76,86 @@ very into over under about out up down off again further once here x
 """.split())
 
 
+# How often each word appears across saved headlines (filled by prepare()):
+# the rarer a word, the better it pins down one story ("Heydari", "Hormuz"),
+# while words like "says" or "oil" are in thousands of headlines.
+_DOC_FREQ: dict[str, int] = {}
+
+
+def prepare(headlines) -> None:
+    """Learn which words are common from a big set of headlines (once per server)."""
+    counts: dict[str, int] = {}
+    for h in headlines:
+        for w in set(re.findall(r"[a-z0-9][a-z0-9'.\-]*", str(h).lower())):
+            counts[w] = counts.get(w, 0) + 1
+    _DOC_FREQ.clear()
+    _DOC_FREQ.update(counts)
+
+
+# Everyday headline words: rare in a business-news archive, but useless for
+# pinning down a story in a web search
+GENERIC = set("""
+move moved moves moving consider considers considering considered receive received receives
+circulating circulate traders trader headline headlines rose rise rises rising risen fell fall
+falls falling reaffirm reaffirms reaffirmed prior except frank relatively relative improvement
+improve improves expect expects expected expectation expense expenses takeaway takeaways drop
+dropping drops dropped major national direct push pushes pushing working work works nearby head
+heads continue continues continued continuing flat compared compare sustainable assume assumes
+assumed most return returns returned gradually gradual average averages averaged depleted
+throughout forecast forecasts forecasting growth asked ask asks provide provides clear response
+conditions condition day days done future reopen reopened open opens opened close closes
+reportedly order leader incident master reports week weeks month months year years today
+tomorrow yesterday time times first second third last next high higher highest low lower lowest
+record big bigger biggest small large larger key main top latest late early level levels deal
+deals talks talk plan plans planned warns warn warned warning set sets see sees seeing seen
+government official officials minister secretary president spokesperson spokesman chief
+general state states statement statements comment comments comments call calls called want wants
+need needs needed make makes made take takes taking took give gives given keep keeps kept
+expected unexpected despite following follow follows ahead behind around near amid
+outlook short term long sharply slightly strong weak weaker stronger increase increased
+increases decrease decreased decreases change changes changed remain remains remained
+possible possibly likely unlikely potential potentially could would should total estimate
+estimates estimated vs versus compared prior previous previously current currently
+""".split())
+
+
 def _search_window(day: pd.Timestamp) -> str:
-    """Google's custom date range: from the day before to two days after."""
+    """Recent stories: the past week. Older ones: the day before to two days after."""
+    if pd.Timestamp.now().normalize() - day <= pd.Timedelta(days=6):
+        return "qdr:w"
     start, end = day - pd.Timedelta(days=1), day + pd.Timedelta(days=2)
     return f"cdr:1,cd_min:{start:%m/%d/%Y},cd_max:{end:%m/%d/%Y}"
 
 
-def key_words(headline: str, limit: int = 12) -> str:
-    words = re.findall(r"[A-Za-z0-9][A-Za-z0-9'.\-]*", headline)
-    kept = [w for w in words if w.lower().strip("'.") not in FILLER]
-    return " ".join(kept[:limit])
+def key_words(headline: str, limit: int = 5, skip: str = "") -> str:
+    """A short search for the story: the headline's subject (its first two
+    meaningful words, e.g. "OPEC October", "Occidental Petroleum") plus its
+    most distinctive other words, in their original order. (Searching for the
+    whole headline usually finds nothing.)"""
+    words = re.findall(r"[A-Za-z0-9][A-Za-z0-9'\-]*(?:\.[A-Za-z0-9]+)*", headline)
+    skip_words = set(skip.lower().split())
+    content = []
+    for i, w in enumerate(words):
+        w = w.strip("'-.").removesuffix("'s").removesuffix("’s")
+        low = w.lower()
+        if (low in FILLER or low in GENERIC or low in skip_words or (len(low) < 3 and not low.isupper())
+                or re.fullmatch(r"[\d.,]+[mbk]?", low)):
+            continue
+        content.append((i, w, _DOC_FREQ.get(low, 0)))
+    subject = content[:2]
+    rest = sorted(content[2:], key=lambda c: c[2])[:max(limit - len(subject), 0)]
+    chosen = sorted(subject + rest, key=lambda c: c[0])
+    seen, out = set(), []
+    for _, w, _ in chosen:
+        if w.lower() not in seen:
+            seen.add(w.lower())
+            out.append(w)
+    return " ".join(out)
 
 
-def web_search(headline: str, day: pd.Timestamp, site: str | None = None) -> str:
-    query = key_words(headline) + (f" site:{site}" if site else "")
+def web_search(headline: str, day: pd.Timestamp, site: str | None = None,
+               skip: str = "") -> str:
+    query = key_words(headline, skip=skip) + (f" site:{site}" if site else "")
     return ("https://www.google.com/search?q=" + quote(query)
             + "&tbs=" + quote(_search_window(day)))
 
@@ -105,7 +171,7 @@ def links(headline: str, time) -> list[tuple[str, str]]:
             break                                  # the most specific match only
     for name, pattern, site in OUTLETS:
         if re.search(pattern, headline) and all(name != n for n, _ in found):
-            found.append((name, web_search(headline, day, site)))
+            found.append((name, web_search(headline, day, site, skip=name)))
             if len(found) >= 2:
                 break
     found.append(("Search the web", web_search(headline, day)))

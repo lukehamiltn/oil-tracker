@@ -2,10 +2,13 @@
 The News page: today's oil news -> similar moments in the past -> what the
 oil market did next.
 
-Two news sources (see news.py and market_news.py):
-  - Worldwide news (Media Cloud): story counts from ~1,800 news sites, since 2015.
-  - Market news (Alpaca/Benzinga): financial news since 2015, saved in full,
-    so headlines and searches work instantly without asking anyone live.
+News sources:
+  - Articles from about 30 publishers' public news feeds (news_feeds.py): the
+    "Latest headlines" list, each linking to the full article.
+  - Benzinga's newswire (market_news.py): one-line flashes, shown separately
+    with links to matching coverage; and the archive since 2015 used for
+    "Like this before" and search.
+  - Worldwide news coverage counts (Media Cloud, since 2015): the topic cards.
 """
 
 import html
@@ -19,6 +22,7 @@ import flash_sources
 import market_news as mn
 import markets as mk
 import news
+import news_feeds as nf
 import ui
 
 TOPIC_KEYS = list(news.TOPICS)
@@ -44,18 +48,64 @@ def current_heat(data: dict) -> tuple[pd.DataFrame, str]:
     return news.heat_now(data["timelines"], data["market_timelines"])
 
 
+@st.cache_data(ttl=60 * 60, show_spinner=False)
+def feed_archive() -> pd.DataFrame:
+    """Saved articles from the publishers' feeds (added to every 3 hours)."""
+    return nf.load_archive()
+
+
+@st.cache_resource(max_entries=1)
+def _search_words(version: str) -> bool:
+    """Teach the web-search helper which words are common (once per archive)."""
+    flash_sources.prepare(mn.load_archive()["headline"])
+    return True
+
+
+def _display_source(source: str) -> str:
+    return "Benzinga" if str(source).lower() == "benzinga" else str(source)
+
+
 @st.cache_data(ttl=15 * 60, show_spinner=False)
 def latest_headlines(_archive: pd.DataFrame) -> tuple[pd.DataFrame, bool]:
-    """(headlines, live?). Live from Alpaca (fast, our own keys); if that
-    fails, the newest saved headlines from the archive."""
+    """(today's news, live?). One table with a "kind" column:
+      - "article": real articles from the publishers' feeds, plus Benzinga
+        stories that have an article behind them
+      - "flash": Benzinga's one-line newswire flashes, each with "coverage"
+        (matching articles from the feeds, if any)
+    Read live (every 15 minutes); if a source doesn't answer, the newest saved
+    stories are used instead."""
+    live = True
+    since = pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=48)
     try:
-        live = mn.latest()
-        if not live.empty:
-            return live, True
+        pool = nf.fetch(oil_only=False)          # everything, for matching flashes
     except Exception as error:
-        print(f"Live headlines unavailable, using saved ones: {error}")
-    recent = _archive[_archive["time"] >= _archive["time"].max() - pd.Timedelta(hours=48)]
-    return mn.oil_related(recent).sort_values("time", ascending=False), False
+        print(f"News feeds unavailable: {error}")
+        pool = pd.DataFrame(columns=nf.COLUMNS)
+    if pool.empty:
+        live = False
+        saved = feed_archive()
+        pool = saved[saved["time"] >= since] if not saved.empty else saved
+    feed_text = pool["headline"] + " " + pool["summary"]
+    articles = pool[feed_text.str.contains(nf.OIL_TERMS)] if len(pool) else pool
+    try:
+        wire = mn.latest()
+    except Exception as error:
+        print(f"Benzinga unavailable, using saved stories: {error}")
+        wire = pd.DataFrame()
+    if wire.empty:
+        live = False
+        recent = _archive[_archive["time"] >= _archive["time"].max() - pd.Timedelta(hours=48)]
+        wire = mn.oil_related(recent)
+    flash = wire["summary"].map(mn.is_flash)
+    articles = pd.concat([articles, wire[~flash]], ignore_index=True)
+    articles = (articles.sort_values("time", ascending=False)
+                .drop_duplicates("headline").assign(kind="article"))
+    flashes = wire[flash].sort_values("time", ascending=False)
+    flashes = flashes.assign(kind="flash",
+                             coverage=nf.match_coverage(flashes, pool, min_score=0.18))
+    heads = pd.concat([articles, flashes], ignore_index=True)
+    heads["source"] = heads["source"].map(_display_source)
+    return heads, live
 
 
 @st.cache_data(ttl=6 * 60 * 60, show_spinner=False, max_entries=200)
@@ -108,29 +158,56 @@ def coverage_chart(t: pd.DataFrame, spikes: pd.DataFrame, color: str, key: str,
     st.plotly_chart(fig, width="stretch", config=ui.CHART_CONFIG, key=key)
 
 
+def _ago(time: pd.Timestamp) -> str:
+    hours = max(int((pd.Timestamp.now(tz="UTC") - time).total_seconds() // 3600), 0)
+    if hours < 1:
+        return "just now"
+    return f"{hours}h ago" if hours < 48 else f"{time:%b %d, %Y}"
+
+
+def _link(label: str, url: str, cls: str = "more") -> str:
+    return (f'<a class="{cls}" href="{html.escape(url)}" target="_blank" '
+            f'rel="noopener">{html.escape(label)} ↗</a>')
+
+
 def headline_list(heads: pd.DataFrame) -> None:
-    now = pd.Timestamp.now(tz="UTC")
+    """Articles: headline (links to the article), summary, publisher and time.
+    Newswire flashes have no article, so they show the full headline with
+    links to matching coverage, the source they cite, or a short web search."""
+    _search_words(str(len(mn.load_archive())))
     rows = []
     for _, h in heads.iterrows():
-        hours = max(int((now - h["time"]).total_seconds() // 3600), 0)
-        ago = f"{hours}h ago" if hours < 48 else f"{h['time']:%b %d, %Y}"
         chips = "".join(ui.chip(LABELS[t], COLORS[t]) for t in h["topics"])
         title = html.escape(h["headline"])
-        if mn.is_flash(h.get("summary")):
-            # A one-line newswire flash: the headline is the whole story, and
-            # the source page is empty, so point to other outlets' coverage
-            body = (f'<span class="flash-title">{title}</span>')
-            more = " · ".join(
-                f'<a class="more" href="{html.escape(url)}" target="_blank">{html.escape(label)} ↗</a>'
-                for label, url in flash_sources.links(h["headline"], h["time"]))
-            extra = f' · <span class="flash">Newswire flash</span> · {more}' 
+        source = f'<span class="publisher">{html.escape(_display_source(h["source"]))}</span>'
+        # Only Benzinga's one-liners are flashes (a publisher's article with no
+        # summary is still an article)
+        is_flash = (h["kind"] == "flash" if "kind" in h and isinstance(h["kind"], str)
+                    else mn.is_flash(h.get("summary")))
+        if is_flash:
+            coverage = h.get("coverage") if isinstance(h.get("coverage"), list) else []
+            links = [_link(c["source"], c["url"]) for c in coverage]
+            if not links:
+                links = [_link(label, url) for label, url
+                         in flash_sources.links(h["headline"], h["time"])]
+            label = "Coverage" if coverage else "Read more"
+            rows.append(f'<div class="headline flash-row"><span class="flash-title">{title}</span>'
+                        f'<div class="meta">{chips}{source} newswire · {_ago(h["time"])}'
+                        f' · <span class="flash">{label}:</span> {" · ".join(links)}</div></div>')
         else:
-            body = (f'<a href="{html.escape(h["url"])}" target="_blank">{title}</a>'
-                    f'<div class="summary">{html.escape(h["summary"])}</div>')
-            extra = ""
-        rows.append(f'<div class="headline">{body}<div class="meta">{chips}'
-                    f'{html.escape(h["source"])} · {ago}{extra}</div></div>')
+            summary = (f'<div class="summary">{html.escape(h["summary"])}</div>'
+                       if isinstance(h["summary"], str) and h["summary"] else "")
+            rows.append(f'<div class="headline"><a href="{html.escape(h["url"])}" target="_blank" '
+                        f'rel="noopener">{title}</a>{summary}<div class="meta">{chips}'
+                        f'{source} · {_ago(h["time"])}</div></div>')
     st.markdown("".join(rows), unsafe_allow_html=True)
+
+
+def _spread(articles: pd.DataFrame, per_source: int = 3, n: int = 20) -> pd.DataFrame:
+    """Newest first, but at most a few stories per publisher, so one site
+    posting a batch can't fill the list."""
+    articles = articles.sort_values("time", ascending=False)
+    return articles[articles.groupby("source").cumcount() < per_source].head(n)
 
 
 VIEWS = {
@@ -172,8 +249,8 @@ def render(prices: pd.Series, data: dict) -> None:
 
 
 def todays_headlines(archive: pd.DataFrame) -> pd.DataFrame:
-    """Today's headlines, topic-tagged stories first, then newest first."""
-    heads, _ = latest_headlines(archive) if not archive.empty else (pd.DataFrame(), False)
+    """Today's articles and flashes, topic-tagged stories first, then newest first."""
+    heads, _ = latest_headlines(archive)
     if heads.empty:
         return heads
     return heads.assign(tagged=heads["topics"].str.len() > 0).sort_values(
@@ -236,8 +313,8 @@ def now_view(data: dict) -> None:
 
     # ---- 2. Latest headlines ---------------------------------------------------
     st.subheader("Latest headlines", anchor=False)
-    _, is_live = latest_headlines(archive) if not archive.empty else (None, False)
-    headlines_section(todays_headlines(archive), is_live, archive)
+    heads, is_live = latest_headlines(archive)
+    headlines_section(heads, is_live, archive)
     st.button("Has a story like one of these happened before? →", type="tertiary",
               key="to_like", on_click=lambda: st.session_state.update(news_view="like"))
 
@@ -249,27 +326,42 @@ def headlines_section(heads: pd.DataFrame, is_live: bool, archive: pd.DataFrame)
     topic = ui.topic_picker("Filter by topic", TOPIC_KEYS, LABELS, COLORS, key="headline_topic",
                             none_text="Showing all of today's news",
                             clear_text="Remove this filter")
-    if topic:
-        pool = pd.concat([heads, mn.oil_related(archive)], ignore_index=True)
-        pool = pool.drop_duplicates("headline")
-        shown = pool[pool["topics"].map(lambda ts: topic in ts)].sort_values(
-            "time", ascending=False).head(15)
-        if shown.empty:
-            st.info(f"No stories about {LABELS[topic].lower()} yet.")
-            return
-        st.caption(f"The latest {len(shown)} stories tagged *{LABELS[topic]}*, newest "
-                   f"first, going back to {shown['time'].min():%b %d, %Y}.")
-        headline_list(shown)
-    elif not heads.empty:
-        if not is_live:
-            st.caption(f"The live feed didn't respond, so these are the newest saved "
-                       f"headlines (to {heads['time'].max():%b %d, %H:%M} UTC).")
-        headline_list(heads.head(15))
-    else:
+    if heads.empty:
         st.info("Headlines are temporarily unavailable; the rest of the page works as normal.")
         return
-    ui.tip("Market news from Benzinga via Alpaca. Tags are assigned by keyword, so a "
-               "few stories may be tagged imperfectly. Click a headline to read the article.")
+    articles = heads[heads["kind"] == "article"]
+    flashes = heads[heads["kind"] == "flash"]
+    if topic:
+        saved = pd.concat([feed_archive(), mn.oil_related(archive)], ignore_index=True)
+        saved = saved[~saved["summary"].map(mn.is_flash)]
+        pool = pd.concat([articles, saved], ignore_index=True).drop_duplicates("headline")
+        articles = pool[pool["topics"].map(lambda ts: topic in ts)]
+        flashes = flashes[flashes["topics"].map(lambda ts: topic in ts)]
+        if articles.empty and flashes.empty:
+            st.info(f"No stories about {LABELS[topic].lower()} yet.")
+            return
+    if not is_live:
+        st.caption("A news source didn't respond, so some of these are the newest saved "
+                   "stories.")
+    shown = _spread(articles, n=12 if topic else 20)
+    if len(shown):
+        if topic:
+            st.caption(f"The latest stories tagged *{LABELS[topic]}*, newest first, going "
+                       f"back to {shown['time'].min():%b %d, %Y}.")
+        headline_list(shown)
+        ui.tip(f"Articles from {articles['source'].nunique()} publishers' news feeds "
+               "(energy press, shipping, world and Middle East news), newest first, at most "
+               "three per publisher. Click a headline to read the full article on the "
+               "publisher's site. Topic tags are assigned by keyword, so a few may be off.",
+               "About these stories")
+    if len(flashes):
+        st.markdown("<div class='eyebrow' style='margin-top:1.2rem'>From the newswire</div>",
+                    unsafe_allow_html=True)
+        headline_list(flashes.head(10))
+        ui.tip("Benzinga newswire flashes are one-line headlines with no article behind "
+               "them. Where other outlets have covered the same story, we link to their "
+               "articles; otherwise to the source the flash cites, or a short web search.",
+               "About the newswire")
 
 
 MATCH_TABLE = {
@@ -301,10 +393,6 @@ def past_matches(text: str, before: pd.Timestamp, _archive: pd.DataFrame,
     found = found.assign(date=found["day"], description=found["headline"])
     return mk.reactions(_markets, found)
 
-
-def _ago(time: pd.Timestamp) -> str:
-    hours = max(int((pd.Timestamp.now(tz="UTC") - time).total_seconds() // 3600), 0)
-    return f"{hours}h ago" if hours < 48 else f"{time:%b %d, %Y}"
 
 
 def _plain(text: str) -> str:

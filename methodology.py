@@ -36,6 +36,15 @@ def news_method() -> None:
 - *Market news* (Benzinga, via Alpaca) covers oil funds and oil companies since 2015.
   Every story is saved with the site, which is why headlines and searches are instant.
 
+**Today's headlines** are real articles read from the public news feeds of about 30
+publishers: energy press (OilPrice.com, Rigzone, World Oil, CNBC Energy, the U.S. EIA),
+shipping news (gCaptain, Splash247, Hellenic Shipping News) and world and Middle East
+news (Al Jazeera, BBC, The Guardian, DW, The National, Middle East Eye and others). Only
+stories that mention oil, fuel, refineries, tankers, Hormuz and so on are kept, at most
+three per publisher in the list. Each headline links to the full article on the
+publisher's site. Benzinga's one-line newswire flashes are listed separately, linked to
+matching coverage from those publishers when there is some.
+
 **Topics** are fixed news searches (for example, attacks on tankers). For each day we
 measure the topic's share of *all* news, so growth in overall coverage doesn't distort
 the comparison.

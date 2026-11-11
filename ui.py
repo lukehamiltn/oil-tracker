@@ -65,6 +65,9 @@ h3 { letter-spacing: -0.005em; }
 .headline .flash { text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.68rem;
     font-weight: 700; color: #52514e; }
 .headline .meta a.more { color: #1f4e8c; font-weight: 500; }
+.headline .publisher { color: #1d1d1b; font-weight: 600; }
+.headline.flash-row { padding: 0.4rem 0; }
+.headline.flash-row .flash-title { font-size: 0.92rem; }
 .chip { display: inline-block; font-size: 0.72rem; font-weight: 600; padding: 0.08rem 0.5rem;
         border-radius: 999px; margin-right: 0.3rem; color: #ffffff; }
 /* Header cards */
