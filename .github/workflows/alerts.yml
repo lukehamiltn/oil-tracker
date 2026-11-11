@@ -11,6 +11,7 @@ name: Spike alerts
 on:
   schedule:
     - cron: "5 1-22/3 * * *"
+    - cron: "0 14 * * 6"     # Saturday: the week in review
   workflow_dispatch:
     inputs:
       test:
@@ -38,6 +39,8 @@ jobs:
         run: |
           if [ "${{ inputs.test }}" = "true" ]; then
             python alerts.py --test
+          elif [ "${{ github.event.schedule }}" = "0 14 * * 6" ]; then
+            python alerts.py --weekly
           else
             python alerts.py
           fi

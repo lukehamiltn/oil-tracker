@@ -66,6 +66,12 @@ h3 { letter-spacing: -0.005em; }
     font-weight: 700; color: #52514e; }
 .headline .meta a.more { color: #1f4e8c; font-weight: 500; }
 .headline .publisher { color: #1d1d1b; font-weight: 600; }
+/* Coming up */
+.kpi.upcoming .up-title { font-family: "Source Serif 4", Georgia, serif; font-size: 1.15rem;
+    font-weight: 600; margin: 0.25rem 0 0.35rem; }
+.kpi.upcoming .up-title a { color: #1d1d1b; text-decoration: none; }
+.kpi.upcoming .up-title a:hover { text-decoration: underline; }
+.kpi.upcoming .past { font-size: 0.82rem; }
 .headline .history { font-size: 0.8rem; color: #52514e; margin-top: 0.25rem;
     padding: 0.2rem 0.55rem; background: #f6f5f1; border-left: 3px solid #1f3a5f;
     border-radius: 0 4px 4px 0; display: inline-block; }

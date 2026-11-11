@@ -34,6 +34,8 @@ import market_data as md
 import market_news as mn
 import mediacloud_news
 import news_feeds
+import upcoming
+import recap
 import markets as mk
 import news
 import news_page
@@ -50,7 +52,7 @@ st.set_page_config(page_title="Oil Tracker · oil news and market history",
 # loaded, so new app.py + old ui.py = crash. Reload them (dependencies first)
 # whenever any of them changed on disk, and once when the server starts.
 # ---------------------------------------------------------------------------
-OWN_MODULES = [es, inv, md, fed, fetch_prices, strat, bt, bot, mediacloud_news, news, news_feeds, flash_sources, mn, mk, ui,
+OWN_MODULES = [es, inv, md, fed, fetch_prices, strat, bt, bot, mediacloud_news, news, news_feeds, flash_sources, mn, upcoming, recap, mk, ui,
                conditions, lab_page, bot_dashboard, news_page, history_page,
                live_prices, methodology, alerts]
 

@@ -124,8 +124,17 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true", help="print, don't send")
     parser.add_argument("--test", action="store_true", help="send one test message")
+    parser.add_argument("--weekly", action="store_true",
+                        help="send the Saturday 'week in review' summary")
     args = parser.parse_args()
-    if args.test:
+    if args.weekly:
+        import recap
+        title, message = recap.weekly_message(recap.build_data())
+        print(title)
+        print(message)
+        if not args.dry_run:
+            send(title, message, ["calendar"])
+    elif args.test:
         send("Oil Tracker alerts are working",
              "You'll get a message here when an oil news topic starts spiking, "
              "with what happened after past spikes.", ["white_check_mark"])

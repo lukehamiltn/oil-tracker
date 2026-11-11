@@ -24,7 +24,10 @@ import market_news as mn
 import markets as mk
 import news
 import news_feeds as nf
+import live_prices
+import recap
 import ui
+import upcoming
 
 TOPIC_KEYS = list(news.TOPICS)
 LABELS = {k: t["label"] for k, t in news.TOPICS.items()}
@@ -246,6 +249,7 @@ def _spread(articles: pd.DataFrame, per_source: int = 3, n: int = 20) -> pd.Data
 VIEWS = {
     "now": "Today",
     "like": "Like this before",
+    "review": "Week in review",
     "topics": "Topics",
     "search": "Search",
 }
@@ -274,6 +278,8 @@ def render(prices: pd.Series, data: dict) -> None:
             return
         st.subheader("Has this happened before?", anchor=False)
         like_this_before(data, archive, todays_headlines(archive).head(15))
+    elif view == "review":
+        week_in_review(data)
     elif view == "topics":
         st.subheader("One topic over time", anchor=False)
         explore_topic(prices, data)
@@ -294,6 +300,135 @@ def todays_headlines(archive: pd.DataFrame) -> pd.DataFrame:
         return heads
     return heads.assign(tagged=heads["topics"].str.len() > 0).sort_values(
         ["tagged", "time"], ascending=[False, False])
+
+
+@st.cache_data(ttl=30 * 60, show_spinner=False)
+def _week_data(version: str, _prices: pd.Series):
+    """Recent closes for every market, and Brent carried up to today."""
+    extended, _ = live_prices.extend(_prices)
+    return recap.market_closes(), extended
+
+
+def week_in_review(data: dict) -> None:
+    st.subheader("Week in review", anchor=False)
+    st.caption("How oil and related markets moved, what made the news, and for each event "
+               "what history suggested compared with what actually happened.")
+    weeks = recap.weeks(8)
+    today = pd.Timestamp.now(tz=live_prices.MARKET_TZ).tz_localize(None).normalize()
+    labels = {i: (f"{m:%b} {m.day}–{f:%b} {f.day}" + (" (this week)" if m <= today <= f + pd.Timedelta(days=2) and i == 0 else ""))
+              for i, (m, f) in enumerate(weeks)}
+    pick = st.selectbox("Week", list(labels), format_func=labels.get, key="review_week")
+    monday, friday = weeks[pick]
+    closes, prices = _week_data(f"{data['prices'].index[-1]}", data["prices"])
+    unfinished = today <= friday
+
+    # 1. How markets moved
+    cards = []
+    for m in recap.WEEK_MARKETS:
+        move = recap.week_move(closes.get(m, pd.Series(dtype=float)), monday, friday)
+        if move is None:
+            continue
+        color = "#1d8a5e" if move >= 0 else "#c43a39"
+        cards.append((mk.MARKETS[m][0], f'<span style="color:{color}">{move:+.1f}%</span>',
+                      "so far this week" if unfinished else "over the week", None))
+    if cards:
+        st.markdown("**How markets moved**")
+        ui.kpi_row(cards, columns=4)
+        ui.tip("Change from the last close before Monday to the latest close that week. Oil "
+               "markets use front-month futures; energy stocks are the XLE fund; the dollar is "
+               "the ICE U.S. dollar index.", "About these numbers")
+
+    # 2. What made the news
+    topics = recap.topic_week(data["timelines"], monday, friday)
+    if not topics.empty:
+        st.markdown("**What made the news**")
+        rows = "".join(
+            f'<div class="headline"><span class="flash-title">{html.escape(r.label)}</span>'
+            f'<div class="meta">{r.ratio:.1f}× its normal share of worldwide news · '
+            f'{r.articles:,} stories</div></div>' for r in topics.head(3).itertuples())
+        st.markdown(rows, unsafe_allow_html=True)
+
+    # 3. Events that week, history vs what happened
+    events = recap.scored(data, prices, recap.events_between(data, monday, friday))
+    st.markdown("**What happened, and what history suggested**")
+    if events.empty:
+        st.caption("No news spikes or scheduled oil events that week.")
+    else:
+        table = pd.DataFrame({
+            "Day": events["day"].dt.strftime("%a %b %d"),
+            "Event": events["label"],
+            "History said (Brent, next week)": [
+                f"{e:+.1f}% avg after {n} past · {mk.VERDICTS[v][0].lower()}" if n else "no past events"
+                for e, n, v in zip(events["expected"], events["n_past"], events["verdict"])],
+            "What happened": [
+                "—" if a is None else f"{a:+.1f}%" + ("" if d == recap.HORIZON else f" (after {d} days)")
+                for a, d in zip(events["actual"], events["days"])],
+            "Right way?": ["—" if r is None else ("Yes" if r else "No") for r in events["right_way"]],
+        })
+        st.dataframe(table, hide_index=True, width="stretch", key="review_table")
+        ui.tip("'History said' is the average Brent move in the week after past events of the "
+               "same type, using only events before this one. 'What happened' is Brent's move "
+               "over the next 5 trading days from the close before the event. 'Right way?' "
+               "compares just the direction, once the week is over.", "How to read this")
+
+    # 4. Track record
+    record = recap.track_record(data, prices)
+    if len(record):
+        hits, total = int(record["right_way"].sum()), len(record)
+        st.markdown("**Track record**")
+        ui.kpi_row([("History pointed the right way", f"{hits} of {total}",
+                     f"{hits / total:.0%} of news spikes, OPEC+ and Fed decisions and big EIA "
+                     "surprises in the last 6 months", None)], columns=1)
+        st.caption("Close to a coin flip, which fits the site's 'could be noise' labels: the "
+                   "averages here describe what usually happened, they are not forecasts.")
+
+
+def coming_up(data: dict) -> None:
+    """The next scheduled events that move oil, with what history says."""
+    try:
+        events = upcoming.upcoming()
+    except Exception as error:
+        print(f"Calendar unavailable: {error!r}")
+        return
+    if events.empty:
+        return
+    today = pd.Timestamp.now(tz=upcoming.TZ).tz_localize(None)
+    cards = []
+    for _, e in events.iterrows():
+        summary, verdict = upcoming.history(e["kind"], data)
+        hour = ""
+        if e["time_et"]:
+            h, m = map(int, str(e["time_et"]).split(":"))
+            hour = f" · {h % 12 or 12}:{m:02d}{'pm' if h >= 12 else 'am'} ET"
+        cards.append(
+            f'<div class="kpi upcoming"><div class="kpi-label">'
+            f'<b>{upcoming.when(e["date"], today)}</b> · {e["date"]:%a %b} {e["date"].day}{hour}</div>'
+            f'<div class="up-title"><a href="{html.escape(e["source"])}" target="_blank" '
+            f'rel="noopener">{html.escape(e["title"])}</a></div>'
+            f'<div class="past">{html.escape(summary)}</div>'
+            + (ui.verdict_badge(verdict, ui.verdict_tip(verdict, *_p_and_n(e["kind"], data)))
+               if summary else "") + '</div>')
+    st.subheader("Coming up", anchor=False)
+    st.markdown(f'<div class="kpi-row" style="--cols:{len(cards)}">{"".join(cards)}</div>',
+                unsafe_allow_html=True)
+    ui.tip("Scheduled events that tend to move oil, with what Brent did after past ones. "
+           "EIA reports come out every Wednesday at 10:30am ET (Thursday in a week with a "
+           "federal holiday); OPEC+ and Fed dates are from their official calendars. Click "
+           "an event's name for its official page.", "About this calendar")
+    st.write("")
+
+
+def _p_and_n(kind: str, data: dict) -> tuple[float, int, str]:
+    """p-value, count and wording for the verdict tip of a calendar card."""
+    results = data["react"][kind]["BRENT"][0]
+    if kind == "inventory":
+        values, what = results[results["category"] == "big_draw"]["day_1_pct"].dropna(), "report day for Brent"
+        return data["sig"].p_value("BRENT", 1, values), len(values), what
+    col = "decision"
+    groups = {d: g["day_5_pct"].dropna() for d, g in results.groupby(col)}
+    best = min(groups, key=lambda d: data["sig"].p_value("BRENT", 5, groups[d])
+               if len(groups[d]) >= mk.MIN_EVENTS else 1)
+    return data["sig"].p_value("BRENT", 5, groups[best]), len(groups[best]), "week for Brent"
 
 
 def now_view(data: dict) -> None:
@@ -350,7 +485,10 @@ def now_view(data: dict) -> None:
         st.html(ui.CARD_CSS.replace("</style>", "\n".join(card_css) + "\n</style>"))
         st.write("")
 
-    # ---- 2. Latest headlines ---------------------------------------------------
+    # ---- 2. Coming up: the next scheduled events ------------------------------
+    coming_up(data)
+
+    # ---- 3. Latest headlines ---------------------------------------------------
     st.subheader("Latest headlines", anchor=False)
     heads, is_live = latest_headlines(archive)
     headlines_section(heads, is_live, archive, data)

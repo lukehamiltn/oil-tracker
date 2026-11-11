@@ -14,7 +14,9 @@ import pandas as pd
 import requests
 
 QUOTE_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
-SYMBOLS = {"BRENT": "BZ=F", "WTI": "CL=F"}      # front-month futures
+SYMBOLS = {"BRENT": "BZ=F", "WTI": "CL=F",      # front-month futures
+           "GASOLINE": "RB=F", "HEATING_OIL": "HO=F", "NATGAS": "NG=F",
+           "XLE": "XLE", "DOLLAR": "DX-Y.NYB"}  # (dollar: the ICE U.S. dollar index)
 MARKET_TZ = "America/New_York"
 
 
@@ -39,12 +41,13 @@ def quote(market: str, timeout: float = 6) -> dict | None:
         return None
 
 
-def daily_closes(market: str, timeout: float = 8) -> pd.Series:
-    """Front-month futures closes for about the last 3 months, by New York date
-    (today's value is the latest price so far). Empty if Yahoo doesn't answer."""
+def daily_closes(market: str, timeout: float = 8, span: str = "3mo") -> pd.Series:
+    """Daily closes (front-month futures for the oil markets) for the last
+    `span` (e.g. "3mo", "1y"), by New York date. Today's value is the latest
+    price so far. Empty if Yahoo doesn't answer."""
     try:
         response = requests.get(QUOTE_URL.format(symbol=SYMBOLS[market]),
-                                params={"range": "3mo", "interval": "1d"},
+                                params={"range": span, "interval": "1d"},
                                 headers={"User-Agent": "Mozilla/5.0"}, timeout=timeout)
         response.raise_for_status()
         result = response.json()["chart"]["result"][0]
@@ -78,5 +81,5 @@ def extend(prices: pd.Series, market: str = "BRENT") -> tuple[pd.Series, int]:
 
 
 if __name__ == "__main__":
-    for key in SYMBOLS:
+    for key in ("BRENT", "WTI"):
         print(key, quote(key))
