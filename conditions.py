@@ -102,7 +102,9 @@ def find_analogs(table: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def render(features: pd.DataFrame) -> None:
+def render(features: pd.DataFrame, recent_days: int = 0) -> None:
+    """recent_days: how many of the latest days come from futures prices (the
+    official spot prices are published about a week late)."""
     table = build_table(features)
     as_of = table.index[-1]
     history = table.dropna(subset=["next_month_pct"])
@@ -119,6 +121,13 @@ For reference, across all days Brent's average move over the next month was
 
     # --- 1. Indicator by indicator ------------------------------------------
     st.markdown(f"**Today's readings** (as of {as_of:%b %d, %Y})")
+    if recent_days:
+        official = table.index[-1 - recent_days]
+        ui.tip(f"Official daily spot prices are published about a week late (latest "
+               f"{official:%b %d}). For the {recent_days} trading days since, the price "
+               "readings use Brent futures, scaled to meet the spot price on the last "
+               "official day. Inventories, hedge-fund positioning and the dollar come from "
+               "their own weekly reports.", "About today's prices")
     summary = indicator_summary(table)
     cols = st.columns(3)
     for i, row in summary.iterrows():

@@ -229,11 +229,25 @@ with tab_history:
 with tab_bots:
     safe(bot_dashboard.render)
 
+@st.cache_data(ttl=30 * 60, show_spinner=False)
+def current_features(version: str):
+    """Today's readings for Market conditions and the Strategy lab: the official
+    price history (about a week behind) carried up to today with futures
+    prices. Research and backtests keep using the official prices only."""
+    extended, added = live_prices.extend(prices)
+    if not added:
+        return data["features"], 0
+    return strat.build_features(extended), added
+
+
+now_features, recent_days = current_features(f"{prices.index[-1]}-{len(prices)}")
+
 with tab_cond:
-    safe(conditions.render, data["features"])
+    safe(conditions.render, now_features, recent_days)
 
 with tab_lab:
-    safe(lab_page.render, data["features"], *data["backtests"], data["inv_events"])
+    safe(lab_page.render, data["features"], *data["backtests"], data["inv_events"],
+         now_features, recent_days)
 
 # ---------------------------------------------------------------------------
 # Scheduled events: EIA reports, OPEC+ meetings, Fed decisions.

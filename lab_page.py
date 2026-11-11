@@ -16,7 +16,11 @@ STRATEGY_COLORS = {"buy_and_hold": "#898781", "trend_200d": "#2a78d6",
                    "supply_news": "#6250d6"}
 
 
-def render(features, bt_results, bt_metrics, inv_events) -> None:
+def render(features, bt_results, bt_metrics, inv_events, now_features=None,
+           recent_days: int = 0) -> None:
+    """features/bt_*: the official history (for the backtests). now_features:
+    the same readings carried up to today (see app.current_features)."""
+    now = features if now_features is None else now_features
     st.subheader("Testing simple trading rules", anchor=False)
     st.markdown(f"""
 Each rule decides at every day's close whether to **own oil or sit in cash**, using
@@ -25,8 +29,8 @@ Rules were designed on **2007–2016**, then tested on **2017–now**, a period 
 never saw. A rule that only works in the first period was probably luck.
 """)
 
-    today = features.iloc[-1]
-    st.markdown(f"**What each rule says now** (as of {features.index[-1]:%b %d, %Y})")
+    today = now.iloc[-1]
+    st.markdown(f"**What each rule says now** (as of {now.index[-1]:%b %d, %Y})")
     readings = {
         "trend_200d": f"Brent ${today['price']:.2f} vs 200-day avg ${today['sma200']:.2f}",
         "big_build_rebound": "Last report: " + inv.LABELS[inv_events.iloc[-1]["category"]],
@@ -34,12 +38,20 @@ never saw. A rule that only works in the first period was probably luck.
         "crowded_short": f"Hedge-fund positioning at {today['mm_positioning_rank']:.0%} "
                          "of its 3-year range",
         "weak_dollar": f"Dollar {today['dollar_vs_50d_pct']:+.1f}% vs its 50-day avg",
-        "supply_news": last_supply_spike(features),
+        "supply_news": last_supply_spike(now),
     }
-    ui.kpi_row([(strat.STRATEGIES[key][0],
-                 "Own oil" if bt_results[key]["position"].iloc[-1] > 0 else "Cash",
+
+    def says_own(key) -> bool:          # each rule applied to today's readings
+        position = strat.STRATEGIES[key][1](now).dropna()
+        return bool(len(position)) and position.iloc[-1] > 0
+
+    ui.kpi_row([(strat.STRATEGIES[key][0], "Own oil" if says_own(key) else "Cash",
                  reading, None) for key, reading in readings.items()
-                if key in bt_results], columns=3)     # (skip a rule whose results aren't built yet)
+                if key in strat.STRATEGIES], columns=3)
+    if recent_days:
+        ui.tip(f"The last {recent_days} trading days use Brent futures prices, because "
+               "official spot prices are published about a week late. The backtests below "
+               "use official prices only.", "About today's prices")
 
     st.write("")
     st.markdown("**Growth of $10,000**")

@@ -39,6 +39,44 @@ def quote(market: str, timeout: float = 6) -> dict | None:
         return None
 
 
+def daily_closes(market: str, timeout: float = 8) -> pd.Series:
+    """Front-month futures closes for about the last 3 months, by New York date
+    (today's value is the latest price so far). Empty if Yahoo doesn't answer."""
+    try:
+        response = requests.get(QUOTE_URL.format(symbol=SYMBOLS[market]),
+                                params={"range": "3mo", "interval": "1d"},
+                                headers={"User-Agent": "Mozilla/5.0"}, timeout=timeout)
+        response.raise_for_status()
+        result = response.json()["chart"]["result"][0]
+        days = (pd.to_datetime(result["timestamp"], unit="s", utc=True)
+                .tz_convert(MARKET_TZ).tz_localize(None).normalize())
+        closes = pd.Series(result["indicators"]["quote"][0]["close"], index=days, dtype=float)
+        closes = closes.dropna()
+        return closes[~closes.index.duplicated(keep="last")]
+    except Exception as error:
+        print(f"Daily futures closes unavailable for {market}: {error!r}")
+        return pd.Series(dtype=float)
+
+
+def extend(prices: pd.Series, market: str = "BRENT") -> tuple[pd.Series, int]:
+    """The official daily spot prices, continued past their last published day
+    with futures closes (official prices arrive about a week late).
+
+    Futures and spot prices differ a little, so the futures are scaled to meet
+    the spot price on the last official day: the series carries on smoothly
+    instead of jumping. Returns (prices, how many days were added)."""
+    futures = daily_closes(market)
+    last_day = prices.index[-1]
+    if futures.empty or futures.index[-1] <= last_day:
+        return prices, 0
+    on_last_day = futures[futures.index <= last_day]
+    if on_last_day.empty:
+        return prices, 0
+    ratio = prices.iloc[-1] / on_last_day.iloc[-1]
+    added = futures[futures.index > last_day] * ratio
+    return pd.concat([prices, added.round(2)]), len(added)
+
+
 if __name__ == "__main__":
     for key in SYMBOLS:
         print(key, quote(key))
