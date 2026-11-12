@@ -1,5 +1,5 @@
 """
-The Oil 101 window: the words the oil market (and this site) uses, in plain
+The Terminology window: the words the oil market (and this site) uses, in plain
 English. Opened from the button in the header.
 """
 
@@ -117,7 +117,7 @@ TERMS = {
 }
 
 
-@st.dialog("Oil 101", width="large")
+@st.dialog("Terminology", width="large")
 def show() -> None:
     st.caption("The words the oil market uses, in plain English.")
     query = st.text_input("Find a word", placeholder="Search, e.g. contango",

@@ -160,7 +160,7 @@ left.markdown(ui.masthead(pd.Timestamp.now(tz="America/New_York")), unsafe_allow
 actions = right.container(key="top_actions")      # (side by side and small on phones)
 if actions.button("Methodology", width="stretch", key="method_top"):
     methodology.show()
-if actions.button("Oil 101", width="stretch", key="glossary_top",
+if actions.button("Terminology", width="stretch", key="glossary_top",
                   help="The words the oil market uses, in plain English."):
     glossary.show()
 actions.link_button("Spike alerts", alerts.SUBSCRIBE_URL, width="stretch",
