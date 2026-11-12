@@ -94,7 +94,7 @@ two business days before the change took effect.
 **Market conditions** compares today's readings with every trading day since 2007.
 "Most similar days" compares all six indicators at once, each scaled to its normal range.
 
-**Strategy lab** backtests only use information that was public at the time, charge
+**Strategy lab** (Research tab) backtests only use information that was public at the time, charge
 {bt.COST_PCT:.2f}% per trade, and were designed on 2007–2016, then tested on 2017 onwards.
 The *supply-scare news* rule buys at the close the day **after** a news spike about tanker
 or facility attacks, Middle East conflict or sanctions (a day's news count is only complete
@@ -106,7 +106,7 @@ cards on the News tab. When a topic reaches "Spiking" it sends a push notificati
 (through the free ntfy app) with the latest headline and what happened after past
 spikes. Each spike alerts once.
 
-**Trading bots** trade fake money in an Alpaca paper account at real prices, checking
+**Trading bots** (Research tab) trade fake money in an Alpaca paper account at real prices, checking
 once each weekday in the two hours before the 4pm ET close.
 """)
 

@@ -228,15 +228,21 @@ st.write("")
 # ---------------------------------------------------------------------------
 # Tabs
 # ---------------------------------------------------------------------------
-tab_news, tab_signals, tab_history, tab_bots, tab_cond, tab_lab, tab_events = st.tabs([
+tab_news, tab_signals, tab_history, tab_cond, tab_events, tab_research = st.tabs([
     "News",
     "Market signals",
     "Event history",
-    "Trading bots",
     "Market conditions",
-    "Strategy lab",
     "Scheduled events",
+    "Research",
 ])
+
+# Research: our own trading experiments, kept apart from the market pages
+with tab_research:
+    st.caption("Our own experiments: simple trading rules tested on past prices, and bots "
+               "that trade them with pretend money. Not advice, and past results don't "
+               "promise future ones.")
+    tab_lab, tab_bots = st.tabs(["Strategy lab", "Trading bots"])
 
 with tab_signals:
     safe(signals_page.render, data)
