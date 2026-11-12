@@ -39,6 +39,8 @@ import recap
 import markets as mk
 import news
 import daily_move
+import storylines
+import storylines_page
 import news_page
 import strategies as strat
 import ui
@@ -54,7 +56,7 @@ st.set_page_config(page_title="Oil Tracker · oil news and market history",
 # whenever any of them changed on disk, and once when the server starts.
 # ---------------------------------------------------------------------------
 OWN_MODULES = [es, inv, md, fed, fetch_prices, strat, bt, bot, mediacloud_news, news, news_feeds, flash_sources, mn, upcoming, recap, mk, ui, daily_move, live_prices,
-               conditions, lab_page, bot_dashboard, news_page, history_page,
+               storylines, conditions, lab_page, bot_dashboard, storylines_page, news_page, history_page,
                methodology, alerts]
 
 

@@ -258,6 +258,7 @@ def _spread(articles: pd.DataFrame, per_source: int = 3, n: int = 20) -> pd.Data
 
 VIEWS = {
     "now": "Today",
+    "stories": "Storylines",
     "like": "Like this before",
     "review": "Week in review",
     "topics": "Topics",
@@ -288,6 +289,9 @@ def render(prices: pd.Series, data: dict) -> None:
             return
         st.subheader("Has this happened before?", anchor=False)
         like_this_before(data, archive, todays_headlines(archive).head(15))
+    elif view == "stories":
+        import storylines_page
+        storylines_page.render(data)
     elif view == "review":
         week_in_review(data)
     elif view == "topics":
@@ -446,6 +450,17 @@ def live_quote(market: str) -> dict | None:
     return live_prices.quote(market)
 
 
+def part_of_storyline(reasons: pd.DataFrame) -> str | None:
+    """The storyline most of today's explaining headlines belong to, if any."""
+    import re
+    import storylines as sl
+    counts = {k: reasons["headline"].map(lambda h: bool(re.search(s["keywords"], str(h),
+                                                                   re.I))).sum()
+              for k, s in sl.STORYLINES.items()}
+    best = max(counts, key=counts.get)
+    return best if counts[best] >= max(2, len(reasons) // 2) else None
+
+
 def why_today(data: dict, heat: pd.DataFrame) -> None:
     """Today's Brent move, how unusual it is, the headlines most likely behind
     it, and what Brent did the week after past days like it."""
@@ -498,6 +513,13 @@ def why_today(data: dict, heat: pd.DataFrame) -> None:
             reasons = dm.likely_reasons(pool, change, hot)
             if len(reasons):
                 headline_list(reasons)
+                story = part_of_storyline(reasons)
+                if story:
+                    import storylines as sl
+                    st.button(f"Part of a bigger story: {sl.STORYLINES[story]['label']} →",
+                              key="why_story", type="tertiary",
+                              on_click=lambda: st.session_state.update(news_view="stories",
+                                                                       storyline=story))
             else:
                 st.caption("No headline in the last day explains the move yet.")
             ui.tip("Headlines from the last day that report oil moving the same way as the "

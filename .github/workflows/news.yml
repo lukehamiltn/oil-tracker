@@ -45,6 +45,12 @@ jobs:
         env:
           MEDIACLOUD_API_KEY: ${{ secrets.MEDIACLOUD_API_KEY }}
         run: python -u mediacloud_news.py stories
+      - name: Update storyline coverage (Media Cloud)
+        continue-on-error: true
+        timeout-minutes: 8
+        env:
+          MEDIACLOUD_API_KEY: ${{ secrets.MEDIACLOUD_API_KEY }}
+        run: python -u storylines.py update
       - name: Save articles from the publishers' news feeds
         continue-on-error: true
         timeout-minutes: 5
