@@ -151,11 +151,12 @@ def get_data():
 # ---------------------------------------------------------------------------
 left, right = st.columns([5, 1], vertical_alignment="center")
 left.markdown(ui.masthead(pd.Timestamp.now(tz="America/New_York")), unsafe_allow_html=True)
-if right.button("Methodology", width="stretch", key="method_top"):
+actions = right.container(key="top_actions")      # (side by side and small on phones)
+if actions.button("Methodology", width="stretch", key="method_top"):
     methodology.show()
-right.link_button("Get spike alerts", alerts.SUBSCRIBE_URL, width="stretch",
-                  help="Free push notifications (ntfy app or browser) when an oil news topic "
-                       "starts spiking, with what happened after past spikes.")
+actions.link_button("Get spike alerts", alerts.SUBSCRIBE_URL, width="stretch",
+                    help="Free push notifications (ntfy app or browser) when an oil news topic "
+                         "starts spiking, with what happened after past spikes.")
 
 if CODE_CHANGED:
     get_data.clear()
@@ -182,7 +183,7 @@ def price_card(label: str, market: str) -> tuple:
         return (label, f"${q['price']:.2f}", note, color)
     series = data["markets"][market]
     return (label, f"${series.iloc[-1]:.2f}",
-            f"daily spot price, {series.index[-1]:%b %d} (live price unavailable)", None)
+            f"daily spot price, {ui.day(series.index[-1], year=False)} (live price unavailable)", None)
 
 
 @st.fragment(run_every=5 * 60)        # the price cards keep themselves up to date
@@ -207,7 +208,7 @@ def header_cards() -> None:
     ])
     st.caption(f"Prices: front-month futures, about 10 min delayed. Charts and research use "
                f"official daily spot prices, published about a week late (latest "
-               f"{prices.index[-1]:%b %d}).")
+               f"{ui.day(prices.index[-1], year=False)}).")
 
 
 header_cards()
@@ -260,7 +261,7 @@ EVENT_KINDS = {
         set="inventory", cat_col="category", categories=inv.CATEGORIES, labels=inv.LABELS,
         colors=inv.COLORS, heading="size of surprise", select_label="Surprise size",
         explore="Explore the reports", table_columns={
-            "date": st.column_config.DateColumn("Report date", format="YYYY-MM-DD"),
+            "date": st.column_config.DateColumn("Report date", format="MMM D, YYYY"),
             "change_mb": st.column_config.NumberColumn("Change (M bbl)", format="%+.1f"),
             "normal_mb": st.column_config.NumberColumn("Normal (M bbl)", format="%+.1f"),
             "surprise_mb": st.column_config.NumberColumn("Surprise (M bbl)", format="%+.1f"),
@@ -269,7 +270,7 @@ EVENT_KINDS = {
         set="opec", cat_col="decision", categories=es.DECISIONS, labels=es.LABELS,
         colors=es.COLORS, heading="decision type", select_label="Decision type",
         explore="Explore individual decisions", table_columns={
-            "date": st.column_config.DateColumn("Date", format="YYYY-MM-DD"),
+            "date": st.column_config.DateColumn("Date", format="MMM D, YYYY"),
             "size_mbd": st.column_config.NumberColumn("Size (mb/d)", format="%.2f"),
             **ui.HORIZON_COLUMNS,
             "description": st.column_config.TextColumn("What happened", width="large")}),
@@ -277,7 +278,7 @@ EVENT_KINDS = {
         set="fed", cat_col="decision", categories=fed.CATEGORIES, labels=fed.LABELS,
         colors=fed.COLORS, heading="type of rate change", select_label="Rate change type",
         explore="Explore individual rate changes", table_columns={
-            "effective_date": st.column_config.DateColumn("Effective", format="YYYY-MM-DD"),
+            "effective_date": st.column_config.DateColumn("Effective", format="MMM D, YYYY"),
             "size_bp": st.column_config.NumberColumn("Change (bp)", format="%+d"),
             "new_rate": st.column_config.NumberColumn("New rate", format="%.2f%%"),
             **ui.HORIZON_COLUMNS,
@@ -301,7 +302,7 @@ Every Wednesday the EIA reports how much crude oil is stored in the U.S. A **dra
 **build** tends to push them **down**. Each week is compared with what's *normal for
 that time of year* (5-year average), because stocks rise and fall with the seasons.
 
-**Latest report ({latest['date']:%A %b %d, %Y}):** {latest['description']}, a surprise of
+**Latest report ({ui.day(latest['date'], weekday=True)}):** {latest['description']}, a surprise of
 **{latest['surprise_mb']:+.1f}M barrels** → *{inv.LABELS[latest['category']]}*.
 """)
     elif kind == "OPEC+ decisions":

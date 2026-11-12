@@ -96,7 +96,7 @@ two hours before the 4pm ET close and only trade when their decision changes.
         col.caption(f"**Holding:** {f'{b['shares']:,.2f} {bot.SYMBOL}' if b['shares'] > 0 else 'cash'}  \n"
                     f"**Today's signal:** {'own ' + bot.SYMBOL if own else 'cash'}  \n{reason}")
     cols[-1].metric(f"Just holding {bot.SYMBOL}", f"{hold_return:+.2f}%",
-                    f"since {data['started']:%b %d, %Y}", delta_color="off", delta_arrow="off", border=True)
+                    f"since {ui.day(data['started'])}", delta_color="off", delta_arrow="off", border=True)
 
     if len(closes) > 1:
         fig = go.Figure()
@@ -114,9 +114,11 @@ two hours before the 4pm ET close and only trade when their decision changes.
                           hovermode="x unified", yaxis_tickprefix="$",
                           yaxis_title="Value of $50,000",
                           legend=dict(orientation="h", yanchor="top", y=-0.12, x=0))
+        # one tick per day ("Nov 9"), not every six hours
+        fig.update_xaxes(tickformat="%b %-d", dtick=86_400_000, hoverformat="%b %-d, %-I:%M %p")
         st.plotly_chart(fig, width="stretch", config=ui.CHART_CONFIG, key="bot_equity")
     else:
-        st.caption(f"The bots started on {data['started']:%b %d, %Y}. "
+        st.caption(f"The bots started on {ui.day(data['started'])}. "
                    "The performance chart appears after a couple of trading days.")
 
     st.markdown("**Trades**")
@@ -132,7 +134,7 @@ two hours before the 4pm ET close and only trade when their decision changes.
             time=trades["time"].dt.tz_convert("America/New_York"),
         ).sort_values("time", ascending=False)
         st.dataframe(trades, width="stretch", hide_index=True, column_config={
-            "time": st.column_config.DatetimeColumn("Time (ET)", format="YYYY-MM-DD HH:mm"),
+            "time": st.column_config.DatetimeColumn("Time (ET)", format="MMM D, YYYY h:mm a"),
             "bot": st.column_config.TextColumn("Bot"),
             "side": st.column_config.TextColumn("Side"),
             "shares": st.column_config.NumberColumn("Shares", format="%.3f"),

@@ -38,7 +38,7 @@ EXAMPLES = ['"Strait of Hormuz"', "Houthi", "refinery fire", "Abqaiq", "Libya",
             '"price war"', '"rig count"', "hurricane", "Venezuela", "lockdown"]
 
 SPIKE_TABLE = {
-    "spike_day": st.column_config.DateColumn("News spike", format="YYYY-MM-DD"),
+    "spike_day": st.column_config.DateColumn("News spike", format="MMM D, YYYY"),
     "headline": st.column_config.TextColumn("Headline around then", width="large"),
     "ratio": st.column_config.NumberColumn("Coverage vs normal", format="%.1fx"),
     "articles": st.column_config.NumberColumn("Articles", format="%d"),
@@ -150,14 +150,14 @@ def coverage_chart(t: pd.DataFrame, spikes: pd.DataFrame, color: str, key: str,
     fig.add_trace(go.Scatter(x=smooth.index, y=smooth.values, mode="lines",
                              name=f"Coverage ({window}-day average)",
                              line=dict(color=color, width=1.6),
-                             hovertemplate="%{x|%b %d, %Y}: " + unit + "<extra></extra>"))
+                             hovertemplate="%{x|%b %-d, %Y}: " + unit + "<extra></extra>"))
     if not spikes.empty:
         at = smooth.reindex(spikes["spike_day"]).values
         fig.add_trace(go.Scatter(
             x=spikes["spike_day"], y=at, mode="markers", name="News spike",
             marker=dict(size=9, color="#ffffff", line=dict(color="#1d1d1b", width=2)),
             customdata=spikes[["description"]].values,
-            hovertemplate="<b>%{x|%b %d, %Y}</b><br>%{customdata[0]}<extra></extra>"))
+            hovertemplate="<b>%{x|%b %-d, %Y}</b><br>%{customdata[0]}<extra></extra>"))
     ui.base_layout(fig, 300, hovermode="closest", yaxis_title=title)
     st.plotly_chart(fig, width="stretch", config=ui.CHART_CONFIG, key=key)
 
@@ -168,7 +168,7 @@ def _ago(time: pd.Timestamp) -> str:
         minutes = int(seconds // 60)
         return "just now" if minutes < 2 else f"{minutes} min ago"
     hours = int(seconds // 3600)
-    return f"{hours}h ago" if hours < 48 else f"{time:%b %d, %Y}"
+    return f"{hours}h ago" if hours < 48 else f"{ui.day(time)}"
 
 
 def _link(label: str, url: str, cls: str = "more") -> str:
@@ -213,7 +213,7 @@ def headline_list(heads: pd.DataFrame, data: dict | None = None) -> None:
     for _, h in heads.iterrows():
         past = history_line(h, data) if data is not None else ""
         chips = "".join(ui.chip(LABELS[t], COLORS[t]) for t in h["topics"])
-        title = html.escape(h["headline"])
+        title = html.escape(ui.headline_case(h["headline"]))
         source = f'<span class="publisher">{html.escape(_display_source(h["source"]))}</span>'
         # Only Benzinga's one-liners are flashes (a publisher's article with no
         # summary is still an article)
@@ -237,6 +237,9 @@ def headline_list(heads: pd.DataFrame, data: dict | None = None) -> None:
                         f'rel="noopener">{title}</a>{summary}<div class="meta">{chips}'
                         f'{source} · {_ago(h["time"])}</div>{past}</div>')
     st.markdown("".join(rows), unsafe_allow_html=True)
+
+
+SHOW_FIRST = 10     # headlines shown before "Show more"
 
 
 def _spread(articles: pd.DataFrame, per_source: int = 3, n: int = 20) -> pd.DataFrame:
@@ -355,7 +358,7 @@ def week_in_review(data: dict) -> None:
         st.caption("No news spikes or scheduled oil events that week.")
     else:
         table = pd.DataFrame({
-            "Day": events["day"].dt.strftime("%a %b %d"),
+            "Day": events["day"].map(lambda d: ui.day(d, year=False, weekday=True)),
             "Event": events["label"],
             "History said (Brent, next week)": [
                 f"{e:+.1f}% avg after {n} past · {mk.VERDICTS[v][0].lower()}" if n else "no past events"
@@ -441,7 +444,7 @@ def now_view(data: dict) -> None:
         st.subheader("What's in the news", anchor=False)
         st.caption(f"Coverage over the last 3 days compared with normal, from "
                    f"{SOURCE_NAMES[heat_source].split(' (')[0].lower()} (data to "
-                   f"{heat['last_day'].max():%b %d, %Y}). For each topic: what Brent did "
+                   f"{ui.day(heat['last_day'].max())}). For each topic: what Brent did "
                    "in the week after past news spikes.")
         card_css = []
         for i, (_, row) in enumerate(heat.iterrows()):
@@ -477,8 +480,9 @@ def now_view(data: dict) -> None:
                         "<div class='card-rule'></div>"
                         f"<div class='eyebrow' style='margin-top:0.4rem'>After {len(past)} past spikes</div>"
                         f"<div class='past'>Brent <b style='color:{shade}'>{week.mean():+.1f}%</b> "
-                        f"the next week · rose {(week > 0).mean():.0%} of the time</div>"
-                        + ui.verdict_badge(verdict, tip),
+                        f"the next week<span class='rose'> · rose {(week > 0).mean():.0%} of "
+                        "the time</span></div>"
+                        + ui.verdict_badge(verdict, tip, quiet=True),
                         unsafe_allow_html=True)
                 else:
                     st.caption("No past spikes to compare with yet.")
@@ -521,12 +525,18 @@ def headlines_section(heads: pd.DataFrame, is_live: bool, archive: pd.DataFrame,
     if not is_live:
         st.caption("A news source didn't respond, so some of these are the newest saved "
                    "stories.")
-    shown = _spread(articles, n=12 if topic else 20)
+    pool = _spread(articles, n=12 if topic else 30)
+    expanded = st.session_state.get("more_headlines", False)
+    shown = pool if expanded else pool.head(SHOW_FIRST)
     if len(shown):
         if topic:
             st.caption(f"The latest stories tagged *{LABELS[topic]}*, newest first, going "
-                       f"back to {shown['time'].min():%b %d, %Y}.")
+                       f"back to {ui.day(shown['time'].min())}.")
         headline_list(shown, data)
+        if len(pool) > SHOW_FIRST:
+            label = "Show fewer stories ↑" if expanded else f"Show {len(pool) - SHOW_FIRST} more stories ↓"
+            st.button(label, key="more_headlines_btn", type="tertiary",
+                      on_click=lambda: st.session_state.update(more_headlines=not expanded))
         ui.tip(f"Articles from {articles['source'].nunique()} publishers' news feeds "
                "(energy press, shipping, world and Middle East news), newest first, at most "
                "three per publisher. Click a headline to read the full article on the "
@@ -535,7 +545,7 @@ def headlines_section(heads: pd.DataFrame, is_live: bool, archive: pd.DataFrame,
     if len(flashes):
         st.markdown("<div class='eyebrow' style='margin-top:1.2rem'>From the newswire</div>",
                     unsafe_allow_html=True)
-        headline_list(flashes.head(10), data)
+        headline_list(flashes.head(6), data)
         ui.tip("Benzinga newswire flashes are one-line headlines with no article behind "
                "them. Where other outlets have covered the same story, we link to their "
                "articles; otherwise to the source the flash cites, or a short web search.",
@@ -543,7 +553,7 @@ def headlines_section(heads: pd.DataFrame, is_live: bool, archive: pd.DataFrame,
 
 
 MATCH_TABLE = {
-    "day": st.column_config.DateColumn("Date", format="YYYY-MM-DD"),
+    "day": st.column_config.DateColumn("Date", format="MMM D, YYYY"),
     "headline": st.column_config.TextColumn("Past headline", width="large"),
     "score": st.column_config.ProgressColumn("Similarity", format="%.2f", min_value=0,
                                              max_value=1),

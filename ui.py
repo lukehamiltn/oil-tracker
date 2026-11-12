@@ -79,8 +79,14 @@ h3 { letter-spacing: -0.005em; }
 .headline .history a:hover { text-decoration: underline; }
 .headline.flash-row { padding: 0.4rem 0; }
 .headline.flash-row .flash-title { font-size: 0.92rem; }
-.chip { display: inline-block; font-size: 0.72rem; font-weight: 600; padding: 0.08rem 0.5rem;
-        border-radius: 999px; margin-right: 0.3rem; color: #ffffff; }
+.chip { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.76rem;
+        font-weight: 500; color: #52514e; margin-right: 0.55rem; white-space: nowrap; }
+.chip-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+/* A topic card's "no clear pattern" note: quiet text instead of a badge */
+.quiet-verdict { font-size: 0.76rem; color: #898781; margin-top: 0.35rem;
+    border-bottom: 1px dotted #c3c2b7; }
+/* "Show more" under the headline list */
+.more-count { font-size: 0.8rem; color: #898781; }
 /* Header cards */
 .kpi-row { display: grid; grid-template-columns: repeat(var(--cols, 4), 1fr); gap: 1rem; margin-bottom: 0.5rem; }
 @media (max-width: 800px) { .kpi-row { grid-template-columns: repeat(2, 1fr); } }
@@ -95,6 +101,12 @@ h3 { letter-spacing: -0.005em; }
   /* topic cards: no reserved second line when a title fits on one */
   .card-title { height: auto !important; -webkit-line-clamp: unset; }
   .past { min-height: 0 !important; }
+  /* Header buttons: two small ones side by side, not two full-width rows */
+  .st-key-top_actions { flex-direction: row !important; gap: 0.5rem !important; margin-top: 0.3rem; }
+  .st-key-top_actions > div { flex: 1 1 0 !important; width: auto !important; }
+  .st-key-top_actions button, .st-key-top_actions a { min-height: 2rem !important;
+      padding: 0.2rem 0.6rem !important; font-size: 0.82rem !important; }
+  .st-key-top_actions p { font-size: 0.82rem !important; }
   /* Coming up: one card per row */
   .kpi-row:has(.upcoming) { grid-template-columns: 1fr !important; }
 }
@@ -103,6 +115,10 @@ h3 { letter-spacing: -0.005em; }
 .kpi-value { font-size: 1.55rem; font-weight: 700; letter-spacing: -0.02em; color: #1d1d1b;
              line-height: 1.25; margin: 0.2rem 0 0.3rem; }
 .kpi-note { font-size: 0.8rem; font-weight: 500; }
+.kpi-note .bucket { display: inline-block; background: #f3f2ee; color: #52514e; padding: 0.05rem 0.45rem;
+    border-radius: 4px; }
+.kpi-after { color: #52514e; font-weight: 400; margin-top: 0.45rem; line-height: 1.4; }
+.kpi-label .note-wrap { border-bottom: 1px dotted #c3c2b7; }
 /* "Like this before" headline list: each headline its own small card */
 .st-key-like_list [role="radiogroup"] { gap: 0.45rem !important; }
 .st-key-like_list [role="radiogroup"] label { width: 100%; margin: 0; align-items: flex-start;
@@ -185,7 +201,40 @@ def eyebrow(text: str) -> None:
 
 
 def chip(text: str, color: str) -> str:
-    return f'<span class="chip" style="background:{color}">{text}</span>'
+    """A quiet topic tag: a small coloured dot and grey text."""
+    return f'<span class="chip"><span class="chip-dot" style="background:{color}"></span>{text}</span>'
+
+
+def day(when, year: bool = True, weekday: bool = False) -> str:
+    """One date style for the whole site: 'Nov 4, 2026' (no leading zero),
+    optionally 'Wed Nov 4, 2026'."""
+    when = pd.Timestamp(when)
+    text = f"{when:%b} {when.day}" + (f", {when.year}" if year else "")
+    return f"{when:%a} {text}" if weekday else text
+
+
+# Small words that stay lower case inside a headline ("Path of the Storm")
+_SMALL = {"a", "an", "and", "as", "at", "but", "by", "for", "from", "in", "into", "of", "on",
+          "or", "than", "the", "to", "via", "vs", "with"}
+
+
+def headline_case(text: str) -> str:
+    """Newswire flashes often Capitalise Every Word. For those, put the small
+    words back in lower case (names and other words are left alone)."""
+    words = text.split()
+    capitals = sum(w[:1].isupper() for w in words if w[:1].isalpha())
+    letters = sum(1 for w in words if w[:1].isalpha())
+    if letters < 5 or capitals < 0.8 * letters:
+        return text                                   # already normal headline style
+    out = []
+    for i, w in enumerate(words):
+        bare = w.strip("'\"‘’“”(),:;")
+        after_colon = i > 0 and words[i - 1].endswith((":", "-", "—", ";"))
+        if i and not after_colon and bare.lower() in _SMALL and bare[:1].isupper() \
+                and not bare.isupper():
+            w = w.replace(bare, bare.lower(), 1)
+        out.append(w)
+    return " ".join(out)
 
 
 # ---- Topic cards: "how loud is it now" vs "does history say it matters" ----
@@ -225,6 +274,22 @@ CARD_CSS = """
 .verdict-wrap .tip::after { content: ""; position: absolute; top: 100%; left: 18px;
     border: 6px solid transparent; border-top-color: #1d1d1b; }
 .verdict-wrap:hover .tip { visibility: visible; opacity: 1; }
+/* Phones: topic cards two to a row, trimmed to the essentials */
+@media (max-width: 640px) {
+  [data-testid="stHorizontalBlock"]:has([class*="st-key-heat_card_"]) {
+      flex-direction: row !important; flex-wrap: wrap !important; gap: 0.5rem !important; }
+  [data-testid="stHorizontalBlock"]:has([class*="st-key-heat_card_"]) > [data-testid="stColumn"] {
+      flex: 0 0 calc(50% - 0.25rem) !important; width: calc(50% - 0.25rem) !important;
+      min-width: 0 !important; }
+  [class*="st-key-heat_card_"] { padding: 0.65rem 0.7rem !important; gap: 0.3rem !important; }
+  [class*="st-key-heat_card_"] .card-title { font-size: 0.88rem; }
+  [class*="st-key-heat_card_"] .heat-num { font-size: 1.3rem; }
+  [class*="st-key-heat_card_"] .heat-unit { font-size: 0.72rem; }
+  [class*="st-key-heat_card_"] .meter-label, [class*="st-key-heat_card_"] .rose { display: none; }
+  [class*="st-key-heat_card_"] .past { font-size: 0.78rem; }
+  [class*="st-key-heat_card_"] .eyebrow { font-size: 0.64rem; }
+  .verdict-wrap .tip { width: 190px; }
+}
 </style>
 """
 
@@ -262,10 +327,16 @@ def verdict_tip(verdict: str, p: float, n: int, what: str = "week") -> str:
     }[verdict]
 
 
-def verdict_badge(verdict: str, tip: str | None = None) -> str:
+def verdict_badge(verdict: str, tip: str | None = None, quiet: bool = False) -> str:
     """Outlined badge with 0–3 signal bars: how sure we are the pattern is real.
-    With tip, hovering the badge shows that explanation."""
+    With tip, hovering the badge shows that explanation. With quiet, 'noise'
+    and 'too few' are plain grey text instead, so only real patterns stand out."""
     text, color = mk.VERDICTS[verdict]
+    if quiet and verdict in ("noise", "few"):
+        words = "No clear pattern" if verdict == "noise" else "Too few past events to judge"
+        note = f'<span class="quiet-verdict">{words}</span>'
+        return (f'<span class="verdict-wrap">{note}<span class="tip">{tip}</span></span>'
+                if tip else note)
     level = VERDICT_BARS[verdict]
     bars = "".join(
         f'<rect x="{i * 5}" y="{8 - 3 * i}" width="3.5" height="{4 + 3 * i}" rx="1" '
@@ -332,9 +403,10 @@ def topic_picker(label: str, options: list, labels: dict, colors: dict, key: str
 # Charts
 # ---------------------------------------------------------------------------
 def base_layout(fig: go.Figure, height: int = 400, **extra) -> go.Figure:
+    legend = extra.pop("legend", dict(orientation="h", yanchor="bottom", y=1.02, x=0,
+                                      font=dict(size=12)))
     fig.update_layout(
-        height=height, margin=dict(l=8, r=8, t=24, b=8),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0, font=dict(size=12)),
+        height=height, margin=dict(l=8, r=8, t=24, b=8), legend=legend,
         hoverlabel=dict(bgcolor="white", bordercolor="#e1e0d9", font_color="#1d1d1b"),
         **extra)
     fig.update_xaxes(gridcolor=GRID, zeroline=False)
@@ -433,7 +505,7 @@ def event_paths(group, paths, color, table_columns, key, market: str = "Brent") 
             fig.add_trace(go.Scatter(
                 x=path.index, y=path.values, mode="lines", showlegend=False,
                 line=dict(color=color, width=1), opacity=0.3,
-                hovertemplate=f"<b>{event['date']:%b %d, %Y}</b><br>"
+                hovertemplate=f"<b>{day(event['date'])}</b><br>"
                               f"{event['description']}<br>%{{y:+.1f}}%<extra></extra>"))
         note = "Thin lines are individual events (hover to see which). Thick line = average."
     else:

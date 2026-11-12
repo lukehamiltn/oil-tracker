@@ -30,7 +30,7 @@ never saw. A rule that only works in the first period was probably luck.
 """)
 
     today = now.iloc[-1]
-    st.markdown(f"**What each rule says now** (as of {now.index[-1]:%b %d, %Y})")
+    st.markdown(f"**What each rule says now** (as of {ui.day(now.index[-1])})")
     readings = {
         "trend_200d": f"Brent ${today['price']:.2f} vs 200-day avg ${today['sma200']:.2f}",
         "big_build_rebound": "Last report: " + inv.LABELS[inv_events.iloc[-1]["category"]],
@@ -55,23 +55,32 @@ never saw. A rule that only works in the first period was probably luck.
 
     st.write("")
     st.markdown("**Growth of $10,000**")
+    # Rules that beat simply holding oil in the test period are drawn bold;
+    # the rest are faded, so the chart shows at a glance what worked
+    test = bt_metrics[bt_metrics["period"] == "Test 2017-now"].set_index("strategy")
+    benchmark = test["annual_return_pct"].get("buy_and_hold", 0)
     fig = go.Figure()
     for key, res in bt_results.items():
         equity = 10_000 * (1 + res["return"]).cumprod()
+        beat = test["annual_return_pct"].get(key, benchmark) > benchmark
         fig.add_trace(go.Scatter(
             x=equity.index, y=equity.values, mode="lines", name=strat.STRATEGIES[key][0],
             line=dict(color=STRATEGY_COLORS[key],
-                      width=1.5 if key == "buy_and_hold" else 2,
+                      width=1.5 if key == "buy_and_hold" else (2.4 if beat else 1.2),
                       dash="dot" if key == "buy_and_hold" else "solid"),
+            opacity=1 if beat or key == "buy_and_hold" else 0.35,
             hovertemplate="$%{y:,.0f}"))
-    fig.add_vline(x=pd.Timestamp(bt.SPLIT), line_color=ui.MUTED, line_dash="dot",
-                  annotation_text="test period starts →", annotation_font_size=11,
-                  annotation_font_color=ui.MUTED)
-    ui.base_layout(fig, 460, hovermode="x unified", yaxis_type="log",
+    fig.add_vline(x=pd.Timestamp(bt.SPLIT), line_color=ui.MUTED, line_dash="dot")
+    fig.add_annotation(x=pd.Timestamp(bt.SPLIT), y=0.02, yref="paper", yanchor="bottom",
+                       xanchor="left", showarrow=False, text=" Test period →",
+                       font=dict(size=11, color=ui.MUTED))
+    ui.base_layout(fig, 480, hovermode="x unified", yaxis_type="log",
                    yaxis_title="Value (log scale)", yaxis_tickprefix="$")
+    fig.update_layout(margin=dict(l=8, r=8, t=60, b=8))      # room for the legend above
     st.plotly_chart(fig, width="stretch", config=ui.CHART_CONFIG, key="lab_equity")
-    ui.tip("Log scale: equal vertical distances = equal % gains. Based on Brent spot "
-               "prices; trading through funds or futures differs.")
+    ui.tip("Bold lines beat buy-and-hold in the 2017–now test; faded lines didn't. "
+           "Log scale: equal vertical distances = equal % gains. Based on Brent spot "
+           "prices; trading through funds or futures differs.")
     results_table(bt_metrics)
 
 
@@ -82,7 +91,7 @@ def last_supply_spike(features) -> str:
     if spikes.empty:
         return "No supply-threat news spikes yet"
     day, topic = spikes.index[-1], spikes.iloc[-1]
-    return f"Last spike: {news.TOPICS[topic]['label'].lower()}, {day:%b %d, %Y}"
+    return f"Last spike: {news.TOPICS[topic]['label'].lower()}, {ui.day(day)}"
 
 
 @st.fragment

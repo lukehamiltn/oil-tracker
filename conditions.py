@@ -120,35 +120,30 @@ For reference, across all days Brent's average move over the next month was
 """)
 
     # --- 1. Indicator by indicator ------------------------------------------
-    st.markdown(f"**Today's readings** (as of {as_of:%b %d, %Y})")
+    st.markdown(f"**Today's readings** (as of {ui.day(as_of)})")
     if recent_days:
         official = table.index[-1 - recent_days]
         ui.tip(f"Official daily spot prices are published about a week late (latest "
-               f"{official:%b %d}). For the {recent_days} trading days since, the price "
+               f"{ui.day(official, year=False)}). For the {recent_days} trading days since, the price "
                "readings use Brent futures, scaled to meet the spot price on the last "
                "official day. Inventories, hedge-fund positioning and the dollar come from "
                "their own weekly reports.", "About today's prices")
     summary = indicator_summary(table)
-    cols = st.columns(3)
-    for i, row in summary.iterrows():
+    cards = []
+    for _, row in summary.iterrows():
         label, fmt, help_text = INDICATORS[row["key"]]
-        cols[i % 3].metric(label, fmt % row["today"],
-                           f"{row['bucket']} · higher than {row['percentile']:.0f}% of days",
-                           delta_color="off", delta_arrow="off", help=help_text, border=True)
-
-    st.markdown("**What Brent did over the next month, when each indicator was in today's bucket**")
-    st.dataframe(
-        summary[["indicator", "bucket", "days", "avg_next_month", "pct_up"]],
-        width="stretch", hide_index=True, key="cond_table", column_config={
-            "indicator": st.column_config.TextColumn("Indicator"),
-            "bucket": st.column_config.TextColumn("Today's bucket"),
-            "days": st.column_config.NumberColumn("Past days in bucket"),
-            "avg_next_month": st.column_config.NumberColumn("Avg next month", format="%+.1f%%"),
-            "pct_up": st.column_config.NumberColumn("Times Brent rose", format="%.0f%%"),
-        })
-    ui.tip(f"Compare each row with the all-days figures above ({base_avg:+.1f}%, "
-               f"rose {base_up:.0f}% of the time). Days next to each other overlap heavily, "
-               "so 'past days' overstates how much independent evidence there is.")
+        title = (f'<span class="note-wrap" tabindex="0">{label}'
+                 f'<span class="note-tip">{help_text}</span></span>')
+        note = (f'<span class="bucket">{row["bucket"]} · higher than {row["percentile"]:.0f}% '
+                f'of days</span><div class="kpi-after">Past days like this: Brent '
+                f'<b>{row["avg_next_month"]:+.1f}%</b> the next month, rose '
+                f'{row["pct_up"]:.0f}% of the time</div>')
+        cards.append((title, fmt % row["today"], note, None))
+    ui.kpi_row(cards, columns=3)
+    ui.tip(f"Each card puts today's reading in one of five buckets (very low to very high) "
+           f"and shows what Brent did over the next month on past days in the same bucket. "
+           f"Compare with all days: {base_avg:+.1f}%, rose {base_up:.0f}% of the time. Days "
+           "next to each other overlap heavily, so these are weaker evidence than they look.")
 
     # --- 2. Closest past situations -------------------------------------------
     st.write(""); st.markdown("**Past situations most like today**")
@@ -165,32 +160,32 @@ For reference, across all days Brent's average move over the next month was
 
     # Price path after each analog
     price = features["price"]
-    fig = go.Figure()
     paths = []
     for day in analogs.index:
         pos = price.index.get_loc(day)
-        path = (price.iloc[pos:pos + HORIZON + 1].values / price.iloc[pos] - 1) * 100
-        paths.append(path)
-        fig.add_trace(go.Scatter(
-            x=list(range(len(path))), y=path, mode="lines", showlegend=False,
-            line=dict(color="#2a78d6", width=1), opacity=0.35,
-            hovertemplate=f"<b>{day:%b %d, %Y}</b><br>%{{y:+.1f}}%<extra></extra>"))
-    avg_path = np.mean(paths, axis=0)
-    fig.add_trace(go.Scatter(x=list(range(len(avg_path))), y=avg_path, mode="lines",
-                             name="Average of matches", line=dict(color="#2a78d6", width=3.5),
-                             hovertemplate="Average: %{y:+.1f}%<extra></extra>"))
+        paths.append((price.iloc[pos:pos + HORIZON + 1].values / price.iloc[pos] - 1) * 100)
+    width = min(len(p) for p in paths)
+    paths = np.array([p[:width] for p in paths])
+    x = list(range(width))
+    low, high = np.percentile(paths, 25, axis=0), np.percentile(paths, 75, axis=0)
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=x + x[::-1], y=list(high) + list(low[::-1]), fill="toself",
+                             fillcolor="rgba(42,120,214,0.15)", line=dict(width=0),
+                             name="Middle half of matches", hoverinfo="skip"))
+    fig.add_trace(go.Scatter(x=x, y=paths.mean(axis=0), mode="lines", name="Average of matches",
+                             line=dict(color="#1f4e8c", width=3),
+                             hovertemplate="Day %{x}: %{y:+.1f}%<extra></extra>"))
     fig.add_hline(y=0, line_color="#c3c2b7", line_width=1)
-    fig.update_layout(height=380, margin=dict(l=10, r=10, t=30, b=10),
-                      hovermode="closest", yaxis_ticksuffix="%",
-                      xaxis_title="Trading days after the matching day",
-                      yaxis_title="% change in Brent",
-                      legend=dict(orientation="h", yanchor="top", y=-0.18, x=0))
+    ui.base_layout(fig, 360, hovermode="x unified", yaxis_ticksuffix="%",
+                   xaxis_title="Trading days after the matching day",
+                   yaxis_title="% change in Brent")
     st.plotly_chart(fig, width="stretch", config=ui.CHART_CONFIG, key="cond_analogs")
-    ui.tip("Each thin line is one past day that looked like today. Hover to see which.")
+    ui.tip("The line is the average path after the past days most like today; the shaded "
+           "band holds the middle half of them. Each one is listed in the table below.")
 
     show = analogs.reset_index(names="date").sort_values("similarity", ascending=False)
     config = {
-        "date": st.column_config.DateColumn("Date", format="YYYY-MM-DD"),
+        "date": st.column_config.DateColumn("Date", format="MMM D, YYYY"),
         "similarity": st.column_config.ProgressColumn("Similarity", format="%.2f",
                                                       min_value=0, max_value=1),
         "next_month_pct": st.column_config.NumberColumn("Brent next month", format="%+.1f%%"),

@@ -88,7 +88,7 @@ def hover_text(row, short: str) -> str:
     detail = "<br>".join(textwrap.wrap(html.escape(str(row["detail"])[:160]), 60))
     move = (f"{short} a week later: <b>{row['day_5_pct']:+.1f}%</b>"
             if pd.notna(row["day_5_pct"]) else f"{short} a week later: not known yet")
-    return f"<b>{html.escape(row['title'])}</b> · {row['date']:%b %d, %Y}<br>{detail}<br>{move}"
+    return f"<b>{html.escape(row['title'])}</b> · {ui.day(row['date'])}<br>{detail}<br>{move}"
 
 
 def timeline_chart(prices: pd.Series, events: pd.DataFrame, market: str, chosen=None):
@@ -130,8 +130,9 @@ def timeline_chart(prices: pd.Series, events: pd.DataFrame, market: str, chosen=
                          dict(count=1, label="1 year", step="year", stepmode="backward"),
                          dict(count=5, label="5 years", step="year", stepmode="backward"),
                          dict(count=10, label="10 years", step="year", stepmode="backward"),
-                         dict(step="all", label="All")], x=0, y=1.08,
-                         bgcolor="#f3f2ee", activecolor="#e1e0d9", font=dict(size=12)))
+                         dict(step="all", label="All")], x=1, xanchor="right", y=1.0,
+                         yanchor="bottom", bgcolor="#ffffff", activecolor="#dbe5f1",
+                         bordercolor="#e1e0d9", borderwidth=1, font=dict(size=13)))
     # Fit the price axis to the years on screen (double-click the chart to refit)
     pad = (high - low) * 0.08
     fig.update_yaxes(range=[low - pad, high + pad])
@@ -217,7 +218,7 @@ def similar_summary(data: dict, event, market: str) -> None:
         f"<div class='eyebrow' style='margin-top:0.6rem'>Every other “{html.escape(name)}”</div>"
         f"<div class='past'>{len(week)} other times: {short} averaged "
         f"<b>{week.mean():+.1f}%</b> a week later and rose {(week > 0).mean():.0%} of the time.</div>"
-        + ui.verdict_badge(verdict, ui.verdict_tip(verdict, p, len(week), f"week for {short}")),
+        + ui.verdict_badge(verdict, ui.verdict_tip(verdict, p, len(week), f"week for {short}"), quiet=True),
         unsafe_allow_html=True)
 
 
@@ -281,11 +282,14 @@ def render(data: dict) -> None:
     with st.container(border=True):
         info, chart = st.columns([2, 3], gap="large")
         with info:
-            ui.eyebrow(f"{KINDS[event['kind']][0]} · {event['date']:%A %b %d, %Y}")
+            ui.eyebrow(f"{KINDS[event['kind']][0]} · {ui.day(event['date'], weekday=True)}")
             st.markdown(ui.chip(html.escape(event["title"]), event["color"]),
                         unsafe_allow_html=True)
-            st.markdown(html.escape(str(event["detail"])))
+            st.markdown(html.escape(ui.headline_case(str(event["detail"]))))
             heads = day_headlines(data["archive"], event)
+            # (the event's own headline is already shown just above)
+            same = heads["headline"].str.strip().str.lower() == str(event["detail"]).strip().lower()                 if len(heads) else []
+            heads = heads[~same] if len(heads) else heads
             if len(heads):
                 st.markdown("<div class='eyebrow' style='margin-top:0.6rem'>Headlines that day</div>",
                             unsafe_allow_html=True)
