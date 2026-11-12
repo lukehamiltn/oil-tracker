@@ -18,6 +18,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+import daily_move as dm
 import event_study as es
 import flash_sources
 import market_news as mn
@@ -440,10 +441,78 @@ def _p_and_n(kind: str, data: dict) -> tuple[float, int, str]:
     return data["sig"].p_value("BRENT", 5, groups[best]), len(groups[best]), "week for Brent"
 
 
+@st.cache_data(ttl=5 * 60, show_spinner=False)
+def live_quote(market: str) -> dict | None:
+    return live_prices.quote(market)
+
+
+def why_today(data: dict, heat: pd.DataFrame) -> None:
+    """Today's Brent move, how unusual it is, the headlines most likely behind
+    it, and what Brent did the week after past days like it."""
+    q = live_quote("BRENT")
+    if q is None or q.get("change_pct") is None:
+        return
+    change, t = q["change_pct"], q["time"]
+    today = pd.Timestamp.now(tz=t.tz).date() == t.date()
+    stats = dm.move_stats(data["markets"]["BRENT"], change)
+    up = change >= 0
+    color = "#1d8a5e" if up else "#c43a39"
+    clock = f"{t.hour % 12 or 12}:{t:%M} {'pm' if t.hour >= 12 else 'am'} ET"
+    quiet = abs(change) < 0.5
+    years = f"trading days in the past {dm.HISTORY_YEARS} years"
+    rank = (f"A quiet day: a smaller move than {100 - stats['bigger_than']:.0f}% of {years}"
+            if quiet else f"A bigger move than {stats['bigger_than']:.0f}% of {years}")
+
+    st.subheader("Why oil moved today" if today else "Oil's last session", anchor=False)
+    with st.container(border=True, key="why_today"):
+        left, right = st.columns([2, 3], gap="large")
+        with left:
+            ui.eyebrow(f"Brent crude · {ui.day(t, year=False, weekday=True)}, {clock}")
+            st.markdown(
+                f"<div class='why-move' style='color:{color}'>{'▲' if up else '▼'} "
+                f"{change:+.1f}%</div><div class='why-price'>${q['price']:.2f} a barrel</div>"
+                f"<div class='why-rank'>{rank}</div>",
+                unsafe_allow_html=True)
+            diff = stats["avg_ahead"] - stats["base_avg"]
+            verdict = ("about the same as any week, so a day like this says little about the "
+                       "next one" if abs(diff) < 0.5 else
+                       f"{'better' if diff > 0 else 'worse'} than a typical week")
+            st.markdown(
+                "<div class='card-rule' style='margin:0.7rem 0 0.5rem'></div>"
+                "<div class='eyebrow'>After past days like this</div>"
+                f"<div class='past'>On the {stats['n']:,} days since {stats['since']:%Y} when "
+                f"Brent {dm.band_text(change, stats['band'])}, it averaged "
+                f"<b>{stats['avg_ahead']:+.1f}%</b> over the next week and rose "
+                f"{stats['pct_up']:.0f}% of the time: {verdict} ({stats['base_avg']:+.1f}%, "
+                f"rose {stats['base_up']:.0f}%).</div>",
+                unsafe_allow_html=True)
+        with right:
+            ui.eyebrow("What the news says")
+            heads, _ = latest_headlines(data["archive"])
+            import mediacloud_news
+            path = mediacloud_news.STORIES_PATH
+            world = coverage_stories(path.stat().st_mtime if path.exists() else 0)
+            pool = pd.concat([heads, world], ignore_index=True) if len(world) else heads
+            hot = [] if heat.empty else list(
+                heat[heat["enough"] & (heat["heat"] >= 1.5)].sort_values("heat", ascending=False)["topic"])
+            reasons = dm.likely_reasons(pool, change, hot)
+            if len(reasons):
+                headline_list(reasons)
+            else:
+                st.caption("No headline in the last day explains the move yet.")
+            ui.tip("Headlines from the last day that report oil moving the same way as the "
+                   "market (\"Oil rises as...\"), which usually give the reason, then the "
+                   "newest stories on the topics getting the most extra coverage. They are "
+                   "the likeliest explanations, not proof of cause.", "How these are picked")
+
+
 def now_view(data: dict) -> None:
     archive = data["archive"]
     heat, heat_source = current_heat(data)
     results = data["news"][0] if heat_source == "world" else data["market_news"][0]
+
+    # ---- 0. Why oil moved today -----------------------------------------------
+    why_today(data, heat)
 
     # ---- 1. What's in the news now ------------------------------------------
     if not heat.empty:

@@ -66,6 +66,12 @@ h3 { letter-spacing: -0.005em; }
     font-weight: 700; color: #52514e; }
 .headline .meta a.more { color: #1f4e8c; font-weight: 500; }
 .headline .publisher { color: #1d1d1b; font-weight: 600; }
+/* Why oil moved today */
+.why-move { font-size: 2.3rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1;
+    margin-top: 0.2rem; }
+.why-price { font-size: 1rem; color: #1d1d1b; font-weight: 600; margin-top: 0.1rem; }
+.why-rank { font-size: 0.85rem; color: #52514e; margin-top: 0.35rem; }
+.st-key-why_today { background: #fbfaf7; }
 /* Coming up */
 .kpi.upcoming .up-title { font-family: "Source Serif 4", Georgia, serif; font-size: 1.15rem;
     font-weight: 600; margin: 0.25rem 0 0.35rem; }
