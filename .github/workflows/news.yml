@@ -51,6 +51,10 @@ jobs:
         env:
           MEDIACLOUD_API_KEY: ${{ secrets.MEDIACLOUD_API_KEY }}
         run: python -u storylines.py update
+      - name: Save today's futures curve
+        continue-on-error: true
+        timeout-minutes: 3
+        run: python -u signals.py snapshot
       - name: Save articles from the publishers' news feeds
         continue-on-error: true
         timeout-minutes: 5

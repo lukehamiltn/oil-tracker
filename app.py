@@ -28,6 +28,9 @@ import history_page
 import alerts
 import live_prices
 import methodology
+import glossary
+import signals
+import signals_page
 import inventory_events as inv
 import lab_page
 import market_data as md
@@ -57,7 +60,7 @@ st.set_page_config(page_title="Oil Tracker · oil news and market history",
 # ---------------------------------------------------------------------------
 OWN_MODULES = [es, inv, md, fed, fetch_prices, strat, bt, bot, mediacloud_news, news, news_feeds, flash_sources, mn, upcoming, recap, mk, ui, daily_move, live_prices,
                storylines, conditions, lab_page, bot_dashboard, storylines_page, news_page, history_page,
-               methodology, alerts]
+               methodology, glossary, signals, signals_page, alerts]
 
 
 @st.cache_resource
@@ -157,7 +160,10 @@ left.markdown(ui.masthead(pd.Timestamp.now(tz="America/New_York")), unsafe_allow
 actions = right.container(key="top_actions")      # (side by side and small on phones)
 if actions.button("Methodology", width="stretch", key="method_top"):
     methodology.show()
-actions.link_button("Get spike alerts", alerts.SUBSCRIBE_URL, width="stretch",
+if actions.button("Oil 101", width="stretch", key="glossary_top",
+                  help="The words the oil market uses, in plain English."):
+    glossary.show()
+actions.link_button("Spike alerts", alerts.SUBSCRIBE_URL, width="stretch",
                     help="Free push notifications (ntfy app or browser) when an oil news topic "
                          "starts spiking, with what happened after past spikes.")
 
@@ -222,14 +228,18 @@ st.write("")
 # ---------------------------------------------------------------------------
 # Tabs
 # ---------------------------------------------------------------------------
-tab_news, tab_history, tab_bots, tab_cond, tab_lab, tab_events = st.tabs([
+tab_news, tab_signals, tab_history, tab_bots, tab_cond, tab_lab, tab_events = st.tabs([
     "News",
+    "Market signals",
     "Event history",
     "Trading bots",
     "Market conditions",
     "Strategy lab",
     "Scheduled events",
 ])
+
+with tab_signals:
+    safe(signals_page.render, data)
 
 with tab_history:
     safe(history_page.render, data)

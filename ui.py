@@ -292,6 +292,13 @@ CARD_CSS = """
 [class*="st-key-heat_card_"] [class*="st-key-open_"] p { font-size: 0.8rem; font-weight: 600; }
 [class*="st-key-heat_card_"]:hover [class*="st-key-open_"] p { text-decoration: underline; }
 .verdict-wrap { z-index: 2; }
+.term-group { font-family: "Source Serif 4", Georgia, serif; font-size: 1.15rem; font-weight: 700;
+    color: #1d1d1b; margin: 1rem 0 0.3rem; }
+.term { display: grid; grid-template-columns: 13rem 1fr; gap: 1rem; padding: 0.5rem 0;
+    border-bottom: 1px solid #ecebe6; font-size: 0.93rem; line-height: 1.45; }
+.term b { color: #1d1d1b; }
+.term span { color: #3d3c39; }
+@media (max-width: 640px) { .term { grid-template-columns: 1fr; gap: 0.15rem; } }
 .dialog-topic { font-family: "Source Serif 4", Georgia, serif; font-size: 1.5rem; font-weight: 700;
     margin: 0.2rem 0 0.1rem; color: #1d1d1b; }
 /* Phones: topic cards two to a row, trimmed to the essentials */
