@@ -88,7 +88,7 @@ def likely_reasons(heads: pd.DataFrame, change_pct: float, hot_topics: list[str]
     if heads.empty:
         return heads
     since = pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=30)
-    recent = heads[heads["time"] >= since].copy()
+    recent = heads[heads["time"] >= since].reset_index(drop=True)
     if recent.empty:
         return recent
     recent["direction"] = recent["headline"].map(direction)
