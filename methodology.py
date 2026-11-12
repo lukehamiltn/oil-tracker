@@ -57,6 +57,12 @@ spikes only count from June to November, and days when the archive collected unu
 few stories are skipped. The market news feed uses the same rules with a lower article
 minimum, since it carries dozens of oil stories a day rather than thousands.
 
+**"Spiking" on today's topic cards** means the last 3 days averaged at least
+{news.SPIKE_RATIO:.0f}× normal coverage *and* had at least
+{news.SOURCES['world']['spike_articles']} stories between them. A high ratio on fewer
+stories shows as "Elevated". When one day carries most of the 3 days' stories, the card
+says so ("Mostly Nov 11"), since a one-day burst is weaker than a sustained story.
+
 **Timing.** Reactions are measured from the close one business day *before* the spike,
 so a story that broke the evening before isn't missed.
 

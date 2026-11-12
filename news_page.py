@@ -125,11 +125,12 @@ def search_archive(query: str, _archive: pd.DataFrame, _markets: dict):
     return t, mk.reactions(_markets, spikes), recent
 
 
-def status(heat: float, enough: bool = True) -> tuple[str, str, str]:
-    """Label, colour and card background tint."""
+def status(heat: float, enough: bool = True, big_enough: bool = True) -> tuple[str, str, str]:
+    """Label, colour and card background tint. A high ratio on few stories
+    shows as Elevated, not Spiking (see news.SOURCES spike_articles)."""
     if not enough:            # too few articles to call it busy or quiet
         return "Quiet", "#898781", "#f7f7f5"
-    if heat >= news.SPIKE_RATIO:
+    if heat >= news.SPIKE_RATIO and big_enough:
         return "Spiking", "#e34948", "#fdf3f2"
     if heat >= 1.5:
         return "Elevated", "#d48f00", "#fdf8ec"
@@ -451,7 +452,7 @@ def now_view(data: dict) -> None:
             if i % 4 == 0:        # a fresh row of columns, so cards in a row match heights
                 cols = st.columns(4)
             past = results[results["topic"] == row["topic"]]
-            label, color, tint = status(row["heat"], row["enough"])
+            label, color, tint = status(row["heat"], row["enough"], row["big_enough"])
             key = f"heat_card_{row['topic']}"
             # every card: a faint background in its status colour, plus a
             # coloured top edge that appears on hover
@@ -467,7 +468,10 @@ def now_view(data: dict) -> None:
                     + (" <span class='heat-unit'>normal coverage</span>" if row["enough"] else
                        f" <span class='heat-unit'>normal · only {row['articles_3d']} "
                        f"article{'s' if row['articles_3d'] != 1 else ''}</span>")
-                    + ui.heat_gauge(row["heat"], color),
+                    + ui.heat_gauge(row["heat"], color)
+                    + (f"<div class='burst'>Mostly {ui.day(row['peak_day'], year=False)}: "
+                       f"{row['peak_articles']} of {row['articles_3d']} stories</div>"
+                       if row["enough"] and row["one_day"] and row["heat"] >= 1.5 else ""),
                     unsafe_allow_html=True)
                 # History: what happened after past spikes, and is it real?
                 if len(past):

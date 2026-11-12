@@ -256,6 +256,7 @@ CARD_CSS = """
 .meter .fill { height: 100%; border-radius: 3px; }
 .meter .tick { position: absolute; top: -3px; width: 2px; height: 12px; background: #52514e; border-radius: 1px; }
 .meter-label { font-size: 0.68rem; color: #898781; position: relative; height: 0.9rem; }
+.burst { font-size: 0.74rem; color: #52514e; margin: 0.1rem 0 0.15rem; }
 .card-rule { border-top: 1px dashed #e1e0d9; margin: 0.2rem 0 0.1rem; }
 /* Titles and the history line always take two lines, so every card has
    its parts at the same height whether its text wraps or not */

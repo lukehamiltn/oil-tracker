@@ -215,9 +215,15 @@ def load_timelines(path: Path = TIMELINES_PATH) -> pd.DataFrame:
 SOURCES = {
     # Worldwide news (Media Cloud; GDELT only as a fallback). Media Cloud counts
     # fewer stories per topic than GDELT did, so a spike needs 10 stories, not 20.
-    "world": {"min_articles": 10, "baseline": "median", "skip_outages": True},
-    "market": {"min_articles": 4, "baseline": "mean", "skip_outages": False},
+    "world": {"min_articles": 10, "baseline": "median", "skip_outages": True,
+              "spike_articles": 50},
+    "market": {"min_articles": 4, "baseline": "mean", "skip_outages": False,
+               "spike_articles": 10},
 }
+# "Spiking" right now also needs real volume: at least spike_articles stories
+# over the last 3 days. With little normal coverage, a few dozen extra
+# articles can push the ratio past 3x; below this it shows as "Elevated".
+ONE_DAY_SHARE = 0.6      # one day with 60%+ of the 3 days' stories = a one-day burst
 
 
 def coverage(t: pd.DataFrame, source: str = "world") -> pd.DataFrame:
@@ -301,13 +307,21 @@ def current_heat(timelines: pd.DataFrame, source: str = "world") -> pd.DataFrame
         if pd.isna(ratio):          # not enough history to say what's normal
             continue
         articles = int(recent["articles"].sum())
+        peak = recent.loc[recent["articles"].idxmax()]
         rows.append({"topic": key, "label": TOPICS[key]["label"], "heat": ratio,
                      "articles_3d": articles,
                      # too few articles for the ratio to mean anything (one
                      # story on a quiet day can look like "6x normal")
                      "enough": articles >= SOURCES[source]["min_articles"],
+                     # enough stories to call it a spike (see spike_articles)
+                     "big_enough": articles >= SOURCES[source]["spike_articles"],
+                     # the busiest of the 3 days, and whether it carries most of them
+                     "peak_day": peak["date"], "peak_articles": int(peak["articles"]),
+                     "one_day": len(recent) > 1 and articles > 0
+                                and peak["articles"] >= ONE_DAY_SHARE * articles,
                      "last_day": c["date"].iloc[-1]})
-    columns = ["topic", "label", "heat", "articles_3d", "enough", "last_day"]
+    columns = ["topic", "label", "heat", "articles_3d", "enough", "big_enough", "peak_day",
+               "peak_articles", "one_day", "last_day"]
     return pd.DataFrame(rows, columns=columns).sort_values(["enough", "heat"],
                                                            ascending=[False, False])
 

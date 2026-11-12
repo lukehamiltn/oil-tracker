@@ -199,6 +199,8 @@ def header_cards() -> None:
         top = busy.iloc[0]
         note = (f"{top['heat']:.1f}× its normal news coverage" if top["heat"] >= 1.5
                 else f"quiet news day: top topic at {top['heat']:.1f}× normal")
+        if top["heat"] >= 1.5 and top["one_day"]:
+            note += f", mostly on {ui.day(top['peak_day'], year=False)}"
         story = ("Biggest oil story now", top["label"], note, None)
     ui.kpi_row([
         price_card("Brent crude", "BRENT"),

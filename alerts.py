@@ -80,10 +80,10 @@ def latest_headline(archive: pd.DataFrame, topic: str) -> str | None:
 
 
 def main(dry_run: bool = False) -> None:
-    timelines = news.load_timelines()
+    timelines = news.load_worldwide()      # Media Cloud (same as the website)
     archive = mn.load_archive()
     heat, source = news.heat_now(timelines, mn.topic_timelines(archive))
-    hot = heat[(heat["heat"] >= news.SPIKE_RATIO) & heat["enough"]]
+    hot = heat[(heat["heat"] >= news.SPIKE_RATIO) & heat["enough"] & heat["big_enough"]]
     print(f"Coverage from {source}: " + ", ".join(
         f"{r.topic} {r.heat:.1f}x" for r in heat.itertuples()))
     state = load_state()
@@ -106,6 +106,9 @@ def main(dry_run: bool = False) -> None:
     for r in due:
         title = f"{r.label}: news coverage {r.heat:.1f}x normal"
         lines = []
+        if r.one_day:
+            lines.append(f"Mostly one day: {r.peak_articles} of {r.articles_3d} stories came on "
+                         f"{r.peak_day:%b} {r.peak_day.day}.")
         headline = latest_headline(archive, r.topic)
         if headline:
             lines.append(f"Latest: {headline}")
