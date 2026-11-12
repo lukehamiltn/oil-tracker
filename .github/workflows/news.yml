@@ -38,6 +38,13 @@ jobs:
         env:
           MEDIACLOUD_API_KEY: ${{ secrets.MEDIACLOUD_API_KEY }}
         run: python -u mediacloud_news.py update
+      - name: Save the articles behind each topic's count (Media Cloud)
+        # Shown when a topic card on the site is clicked
+        continue-on-error: true
+        timeout-minutes: 12
+        env:
+          MEDIACLOUD_API_KEY: ${{ secrets.MEDIACLOUD_API_KEY }}
+        run: python -u mediacloud_news.py stories
       - name: Save articles from the publishers' news feeds
         continue-on-error: true
         timeout-minutes: 5

@@ -234,9 +234,14 @@ def headline_list(heads: pd.DataFrame, data: dict | None = None) -> None:
         else:
             summary = (f'<div class="summary">{html.escape(h["summary"])}</div>'
                        if isinstance(h["summary"], str) and h["summary"] else "")
+            # (worldwide-news stories only have a date, and may be reprinted elsewhere)
+            when = ui.day(h["time"], year=False) if h.get("date_only") == True else _ago(h["time"])
+            copies = h.get("copies")
+            reprints = (f' · also on {int(copies) - 1} other site{"s" if copies > 2 else ""}'
+                        if pd.notna(copies) and copies > 1 else "")
             rows.append(f'<div class="headline"><a href="{html.escape(h["url"])}" target="_blank" '
                         f'rel="noopener">{title}</a>{summary}<div class="meta">{chips}'
-                        f'{source} · {_ago(h["time"])}</div>{past}</div>')
+                        f'{source} · {when}{reprints}</div>{past}</div>')
     st.markdown("".join(rows), unsafe_allow_html=True)
 
 
@@ -447,7 +452,7 @@ def now_view(data: dict) -> None:
                    f"{SOURCE_NAMES[heat_source].split(' (')[0].lower()} (data to "
                    f"{ui.day(heat['last_day'].max())}). For each topic: what Brent did "
                    "in the week after past news spikes.")
-        card_css = []
+        card_css, opened = [], None
         for i, (_, row) in enumerate(heat.iterrows()):
             if i % 4 == 0:        # a fresh row of columns, so cards in a row match heights
                 cols = st.columns(4)
@@ -490,7 +495,11 @@ def now_view(data: dict) -> None:
                         unsafe_allow_html=True)
                 else:
                     st.caption("No past spikes to compare with yet.")
+                if st.button("Read the stories →", key=f"open_{row['topic']}", type="tertiary"):
+                    opened = row
         st.html(ui.CARD_CSS.replace("</style>", "\n".join(card_css) + "\n</style>"))
+        if opened is not None:
+            topic_dialog(opened["topic"], opened, data)
         st.write("")
 
     # ---- 2. Coming up: the next scheduled events ------------------------------
@@ -518,11 +527,7 @@ def headlines_section(heads: pd.DataFrame, is_live: bool, archive: pd.DataFrame,
     articles = heads[heads["kind"] == "article"]
     flashes = heads[heads["kind"] == "flash"]
     if topic:
-        saved = pd.concat([feed_archive(), mn.oil_related(archive)], ignore_index=True)
-        saved = saved[~saved["summary"].map(mn.is_flash)]
-        pool = pd.concat([articles, saved], ignore_index=True).drop_duplicates("headline")
-        articles = pool[pool["topics"].map(lambda ts: topic in ts)]
-        flashes = flashes[flashes["topics"].map(lambda ts: topic in ts)]
+        articles, flashes = topic_stories(topic, heads, archive)
         if articles.empty and flashes.empty:
             st.info(f"No stories about {LABELS[topic].lower()} yet.")
             return
@@ -554,6 +559,82 @@ def headlines_section(heads: pd.DataFrame, is_live: bool, archive: pd.DataFrame,
                "them. Where other outlets have covered the same story, we link to their "
                "articles; otherwise to the source the flash cites, or a short web search.",
                "About the newswire")
+
+
+def topic_stories(topic: str, heads: pd.DataFrame, archive: pd.DataFrame):
+    """(articles, flashes) about one topic: today's, plus saved publisher and
+    Benzinga articles, so a quiet day still shows the latest coverage."""
+    articles = heads[heads["kind"] == "article"] if len(heads) else heads
+    flashes = heads[heads["kind"] == "flash"] if len(heads) else heads
+    saved = pd.concat([feed_archive(), mn.oil_related(archive)], ignore_index=True)
+    saved = saved[~saved["summary"].map(mn.is_flash)]
+    pool = pd.concat([articles, saved], ignore_index=True).drop_duplicates("headline")
+
+    def about(frame):
+        return frame[frame["topics"].map(lambda ts: topic in ts)] if len(frame) else frame
+    return about(pool), about(flashes)
+
+
+@st.cache_data(ttl=15 * 60, show_spinner=False)
+def coverage_stories(version: float) -> pd.DataFrame:
+    """The articles behind each topic's worldwide count (saved every 3 hours
+    by the news job, see mediacloud_news.update_stories)."""
+    import mediacloud_news
+    t = mediacloud_news.load_stories()
+    return t.assign(time=pd.to_datetime(t["time"]).dt.tz_localize("UTC"),
+                    summary="", kind="article", date_only=True,
+                    topics=t["headline"].map(lambda h: news.classify(str(h))))
+
+
+@st.dialog("Latest stories", width="large")
+def topic_dialog(topic: str, row, data: dict) -> None:
+    """Opened by clicking a topic card: the stories behind its count, then
+    the latest from our publishers' feeds."""
+    import mediacloud_news
+    label, color, _ = status(row["heat"], row["enough"], row["big_enough"])
+    st.markdown(ui.status_line(label, color)
+                + f"<div class='dialog-topic'>{LABELS[topic]}</div>", unsafe_allow_html=True)
+    path = mediacloud_news.STORIES_PATH
+    behind = coverage_stories(path.stat().st_mtime if path.exists() else 0)
+    behind = behind[behind["topic"] == topic].sort_values("time", ascending=False)
+    copies = int(behind["copies"].sum()) if len(behind) else 0
+    st.caption(f"{row['heat']:.1f}× normal coverage over the last 3 days: "
+               f"{row['articles_3d']} articles in worldwide news."
+               + (f" Mostly {ui.day(row['peak_day'], year=False)}: {row['peak_articles']} of them."
+                  if row["one_day"] else ""))
+
+    st.markdown("**The stories behind the count**")
+    if len(behind):
+        st.caption(f"{len(behind)} different stories whose headline is about this topic"
+                   + (f", published {copies} times across news sites" if copies > len(behind)
+                      else "") + ". Click a headline to read it.")
+        headline_list(behind.head(15), data)
+    else:
+        st.caption("No articles with this topic in the headline over the last 3 days. "
+                   "The count comes from articles that only mention it in passing.")
+    ui.tip("Worldwide coverage counts every article that mentions the topic anywhere, "
+           "including the same story reprinted by many sites, and pages that only mention it "
+           "in passing. This list keeps one copy of each story, and only those whose "
+           "headline is about the topic.", "Why the count is bigger than this list")
+
+    heads, _ = latest_headlines(data["archive"])
+    articles, flashes = topic_stories(topic, heads, data["archive"])
+    recent = articles[articles["time"] >= pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=14)]
+    recent = recent[~recent["headline"].map(mediacloud_news._title_key)
+                    .isin(set(behind["headline"].map(mediacloud_news._title_key)))]
+    if len(recent):
+        st.markdown("**More from our publishers, last 2 weeks**")
+        headline_list(recent.sort_values("time", ascending=False).head(10), data)
+    if len(flashes):
+        st.markdown("<div class='eyebrow' style='margin-top:1rem'>From the newswire</div>",
+                    unsafe_allow_html=True)
+        headline_list(flashes.head(5), data)
+
+    def to_topic() -> None:
+        st.session_state.update(news_view="topics", news_topic=topic)
+    if st.button("See this topic over time, and what oil did after past spikes →",
+                 type="tertiary", on_click=to_topic, key="dialog_to_topic"):
+        st.rerun()
 
 
 MATCH_TABLE = {

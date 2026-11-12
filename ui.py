@@ -275,6 +275,19 @@ CARD_CSS = """
 .verdict-wrap .tip::after { content: ""; position: absolute; top: 100%; left: 18px;
     border: 6px solid transparent; border-top-color: #1d1d1b; }
 .verdict-wrap:hover .tip { visibility: visible; opacity: 1; }
+/* The whole card is a button: the "Read the stories" link is stretched over it */
+[class*="st-key-heat_card_"] { position: relative; cursor: pointer; }
+[class*="st-key-heat_card_"] [class*="st-key-open_"],
+[class*="st-key-heat_card_"] [class*="st-key-open_"] * { position: static !important; }
+[class*="st-key-heat_card_"] [class*="st-key-open_"] button::after {
+    content: ""; position: absolute; inset: 0; z-index: 1; }
+[class*="st-key-heat_card_"] [class*="st-key-open_"] button { padding: 0; min-height: 0;
+    color: #1f4e8c; }
+[class*="st-key-heat_card_"] [class*="st-key-open_"] p { font-size: 0.8rem; font-weight: 600; }
+[class*="st-key-heat_card_"]:hover [class*="st-key-open_"] p { text-decoration: underline; }
+.verdict-wrap { z-index: 2; }
+.dialog-topic { font-family: "Source Serif 4", Georgia, serif; font-size: 1.5rem; font-weight: 700;
+    margin: 0.2rem 0 0.1rem; color: #1d1d1b; }
 /* Phones: topic cards two to a row, trimmed to the essentials */
 @media (max-width: 640px) {
   [data-testid="stHorizontalBlock"]:has([class*="st-key-heat_card_"]) {

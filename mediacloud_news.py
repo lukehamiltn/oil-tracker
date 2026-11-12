@@ -72,6 +72,78 @@ def counts(search, query: str, start: dt.date, end: dt.date, tries: int = 3) -> 
         ["date", "articles", "all_articles"]]
 
 
+STORIES_PATH = Path(__file__).parent / "news_data" / "mc_stories.csv"
+STORY_DAYS = 3             # the same window as the topic cards
+STORY_PAGES = 3            # at most 3 pages of 200 stories per topic
+
+
+def _title_key(title: str) -> str:
+    """Same headline, any punctuation or site: one story (syndicated copies
+    of one article appear on dozens of sites)."""
+    return re.sub(r"[^a-z0-9 ]", "", str(title).lower())[:70]
+
+
+def topic_stories(search, key_: str, start: dt.date, end: dt.date) -> pd.DataFrame:
+    """The articles behind one topic's count: copies removed, and only those
+    whose headline is about the topic (Media Cloud searches the full text, so
+    a page that mentions OPEC in a sidebar counts too)."""
+    query, rows, token = to_mediacloud(news.TOPICS[key_]["query"]), [], None
+    for _ in range(STORY_PAGES):
+        page, token = search.story_list(query, start, end, collection_ids=COLLECTIONS,
+                                        page_size=200, pagination_token=token)
+        rows += page
+        if not token:
+            break
+        time.sleep(WAIT_SECONDS)
+    columns = ["topic", "time", "headline", "url", "source", "copies"]
+    if not rows:
+        return pd.DataFrame(columns=columns)
+    t = pd.DataFrame(rows)
+    t = t[t["title"].map(lambda title: key_ in news.classify(str(title)))]
+    if t.empty:
+        return pd.DataFrame(columns=columns)
+    t["key"] = t["title"].map(_title_key)
+    t["copies"] = t.groupby("key")["key"].transform("size")
+    t = t.sort_values("publish_date").drop_duplicates("key")      # the first to publish it
+    return pd.DataFrame({"topic": key_, "time": pd.to_datetime(t["publish_date"]),
+                         "headline": t["title"], "url": t["url"], "source": t["media_name"],
+                         "copies": t["copies"]})[columns]
+
+
+def update_stories(path: Path = STORIES_PATH) -> bool:
+    """Save the latest articles behind every topic's count (shown when a
+    topic card on the site is clicked). Replaces the file each run."""
+    import mediacloud.api as mc
+    key = api_key()
+    if not key:
+        print("No MEDIACLOUD_API_KEY set - skipping.")
+        return False
+    search = mc.SearchApi(key)
+    end = dt.datetime.now(dt.timezone.utc).date()
+    start = end - dt.timedelta(days=STORY_DAYS)
+    old = pd.read_csv(path) if path.exists() else pd.DataFrame(columns=["topic"])
+    tables, all_ok = [], True
+    for i, key_ in enumerate(news.TOPICS):
+        if i:
+            time.sleep(WAIT_SECONDS)
+        try:
+            found = topic_stories(search, key_, start, end)
+            print(f"{news.TOPICS[key_]['label']}: {len(found)} stories")
+        except Exception as error:
+            print(f"{key_}: skipped for now ({error!r}); keeping the last saved list.")
+            found, all_ok = old[old["topic"] == key_], False
+        tables.append(found)
+    path.parent.mkdir(exist_ok=True)
+    pd.concat(tables, ignore_index=True).to_csv(path, index=False)
+    return all_ok
+
+
+def load_stories(path: Path = STORIES_PATH) -> pd.DataFrame:
+    if not path.exists():
+        return pd.DataFrame(columns=["topic", "time", "headline", "url", "source", "copies"])
+    return pd.read_csv(path, parse_dates=["time"])
+
+
 def load(path: Path = PATH) -> pd.DataFrame:
     if not path.exists():
         return pd.DataFrame(columns=["topic", "date", "articles", "all_articles"])
@@ -120,5 +192,8 @@ def update(path: Path = PATH) -> bool:
 
 
 if __name__ == "__main__":
-    if (sys.argv[1] if len(sys.argv) > 1 else "update") == "update":
+    command = sys.argv[1] if len(sys.argv) > 1 else "update"
+    if command == "update":
         sys.exit(0 if update() else 1)
+    if command == "stories":
+        sys.exit(0 if update_stories() else 1)
