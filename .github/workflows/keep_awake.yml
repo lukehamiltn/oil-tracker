@@ -14,7 +14,9 @@ permissions:
 
 jobs:
   visit:
-    runs-on: ubuntu-latest
+    # Pinned: Playwright can't install its browser on Ubuntu 26 yet (ubuntu-latest
+    # moved to it on Nov 14, 2026 and these runs failed). Revisit after upgrading Playwright.
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
