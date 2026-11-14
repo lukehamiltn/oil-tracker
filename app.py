@@ -156,7 +156,7 @@ def get_data():
 # Header - drawn BEFORE the data loads, so a visitor sees the site straight
 # away (with a short loading line under it) instead of a blank page.
 # ---------------------------------------------------------------------------
-left, right = st.columns([5, 1], vertical_alignment="center")
+left, right = st.columns([2, 1], vertical_alignment="top")
 left.markdown(ui.masthead(pd.Timestamp.now(tz="America/New_York")), unsafe_allow_html=True)
 actions = right.container(key="top_actions")      # (side by side and small on phones)
 if actions.button("Methodology", width="stretch", key="method_top"):
@@ -196,10 +196,27 @@ def price_card(label: str, market: str) -> tuple:
             f"daily spot price, {ui.day(series.index[-1], year=False)} (live price unavailable)", None)
 
 
+def next_event_card() -> tuple:
+    """The next big scheduled event (OPEC+ or the Fed; the weekly EIA report
+    only if nothing else is due within three weeks)."""
+    try:
+        events = upcoming.upcoming(n=3)
+    except Exception:
+        events = pd.DataFrame()
+    if events.empty:
+        n = sum(len(data[k][0]) for k in ("opec", "inventory", "fed", "news"))
+        return ("Past events analysed", f"{n:,}", "news spikes, OPEC+, EIA and Fed", None)
+    today = pd.Timestamp.now(tz=upcoming.TZ).tz_localize(None).normalize()
+    big = events[(events["kind"] != "inventory")
+                 & (events["date"] <= today + pd.Timedelta(days=21))]
+    e = (big if len(big) else events).iloc[0]
+    return ("Next big event", e["title"],
+            f"{upcoming.when(e['date'], today)} · {e['date']:%a %b} {e['date'].day}", None)
+
+
 @st.fragment(run_every=5 * 60)        # the price cards keep themselves up to date
 def header_cards() -> None:
     heat, _ = news_page.current_heat(data)
-    n_events = sum(len(data[k][0]) for k in ("opec", "inventory", "fed", "news"))
     busy = heat[heat["enough"]] if not heat.empty else heat
     if heat.empty:
         story = ("Biggest oil story now", "—", "news data loading", None)
@@ -218,7 +235,7 @@ def header_cards() -> None:
         price_card("Brent crude", "BRENT"),
         price_card("WTI crude", "WTI"),
         story,
-        ("Past events analysed", f"{n_events:,}", "news spikes, OPEC+, EIA and Fed", None),
+        next_event_card(),
     ])
     st.caption(f"Prices: front-month futures, about 10 min delayed. Charts and research use "
                f"official daily spot prices, published about a week late (latest "

@@ -100,6 +100,8 @@ def latest_headlines(_archive: pd.DataFrame) -> tuple[pd.DataFrame, bool]:
         live = False
         recent = _archive[_archive["time"] >= _archive["time"].max() - pd.Timedelta(hours=48)]
         wire = mn.oil_related(recent)
+    if not wire.empty:
+        wire = wire[~wire["headline"].map(mn.is_analyst_note)]
     flash = wire["summary"].map(mn.is_flash)
     articles = pd.concat([articles, wire[~flash]], ignore_index=True)
     articles = (articles.sort_values("time", ascending=False)

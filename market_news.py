@@ -91,6 +91,18 @@ def fetch(start: pd.Timestamp, end: pd.Timestamp, timeout: float = 30,
     return to_table(rows)
 
 
+# Analyst rating changes ("Mizuho Maintains Neutral on Marathon, Lowers Price
+# Target to $440") are stock-picking notes, not oil news
+ANALYST_NOTE = re.compile(
+    r"price target|initiates coverage|\b(?:maintains|reiterates|upgrades?|downgrades?)\b.*"
+    r"\b(?:buy|sell|hold|neutral|overweight|underweight|outperform|underperform|"
+    r"equal[- ]weight|market perform|sector perform|in-line|peer perform)\b", re.I)
+
+
+def is_analyst_note(headline) -> bool:
+    return bool(ANALYST_NOTE.search(str(headline)))
+
+
 def is_flash(summary) -> bool:
     """Benzinga "newsdesk" flashes are a single headline with no article behind
     them (their page is empty), and come with no summary."""

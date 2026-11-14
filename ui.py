@@ -107,15 +107,20 @@ h3 { letter-spacing: -0.005em; }
   /* topic cards: no reserved second line when a title fits on one */
   .card-title { height: auto !important; -webkit-line-clamp: unset; }
   .past { min-height: 0 !important; }
-  /* Header buttons: two small ones side by side, not two full-width rows */
-  .st-key-top_actions { flex-direction: row !important; gap: 0.5rem !important; margin-top: 0.3rem; }
-  .st-key-top_actions > div { flex: 1 1 0 !important; width: auto !important; }
-  .st-key-top_actions button, .st-key-top_actions a { min-height: 2rem !important;
-      padding: 0.2rem 0.6rem !important; font-size: 0.82rem !important; }
-  .st-key-top_actions p { font-size: 0.82rem !important; }
+  .st-key-top_actions { justify-content: stretch !important; margin-top: 0.3rem !important; }
+  .st-key-top_actions > div { flex: 1 1 0 !important; }
   /* Coming up: one card per row */
   .kpi-row:has(.upcoming) { grid-template-columns: 1fr !important; }
 }
+/* Header buttons: one compact row at the top right */
+.st-key-top_actions { flex-direction: row !important; flex-wrap: nowrap !important;
+    justify-content: flex-end !important; gap: 0.45rem !important; margin-top: 1.2rem; }
+.st-key-top_actions > div { width: auto !important; flex: 0 0 auto !important; }
+.st-key-top_actions button, .st-key-top_actions a { min-height: 2rem !important;
+    padding: 0.2rem 0.75rem !important; white-space: nowrap; }
+.st-key-top_actions p { font-size: 0.82rem !important; }
+/* Bold one-line section headings ("**Trades**") get room above them */
+[data-testid="stMarkdownContainer"]:has(> p:only-child > strong:only-child) { margin-top: 0.9rem; }
 .kpi { border: 1px solid #e1e0d9; border-radius: 0.5rem; padding: 0.9rem 1rem; background: #ffffff; }
 .kpi-label { font-size: 0.85rem; color: #52514e; }
 .kpi-value { font-size: 1.55rem; font-weight: 700; letter-spacing: -0.02em; color: #1d1d1b;
