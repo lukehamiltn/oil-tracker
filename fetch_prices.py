@@ -15,7 +15,6 @@ If one source is down, the copy already saved for it is kept.
 """
 
 import io
-import os
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -67,18 +66,9 @@ def download_alpaca(name: str, symbol: str) -> pd.DataFrame:
     from alpaca.data.historical import StockHistoricalDataClient
     from alpaca.data.requests import StockBarsRequest
     from alpaca.data.timeframe import TimeFrame
-    from dotenv import load_dotenv
+    import credentials
 
-    load_dotenv()
-    if "ALPACA_API_KEY" not in os.environ:
-        try:                                  # on Streamlit Cloud the keys are secrets
-            import streamlit as st
-            for key in ("ALPACA_API_KEY", "ALPACA_SECRET_KEY"):
-                os.environ.setdefault(key, st.secrets[key])
-        except Exception:
-            pass
-    client = StockHistoricalDataClient(os.environ["ALPACA_API_KEY"],
-                                       os.environ["ALPACA_SECRET_KEY"])
+    client = StockHistoricalDataClient(*credentials.alpaca())
     bars = client.get_stock_bars(StockBarsRequest(
         symbol_or_symbols=symbol, timeframe=TimeFrame.Day,
         start=datetime(2015, 1, 1, tzinfo=timezone.utc), adjustment=Adjustment.ALL,

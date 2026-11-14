@@ -430,6 +430,16 @@ def topic_picker(label: str, options: list, labels: dict, colors: dict, key: str
 # ---------------------------------------------------------------------------
 # Charts
 # ---------------------------------------------------------------------------
+def range_buttons(years: list[int], all_label: str = "All", y: float = 1.02) -> dict:
+    """The "1 year / 3 years / All" buttons at the top right of a time chart
+    (pass to fig.update_xaxes(rangeselector=...))."""
+    buttons = [dict(count=n, label=f"{n} year{'s' if n > 1 else ''}", step="year",
+                    stepmode="backward") for n in years]
+    return dict(buttons=buttons + [dict(step="all", label=all_label)], x=1, xanchor="right",
+                y=y, yanchor="bottom", bgcolor="#ffffff", activecolor="#dbe5f1",
+                bordercolor="#e1e0d9", borderwidth=1, font=dict(size=12))
+
+
 def base_layout(fig: go.Figure, height: int = 400, **extra) -> go.Figure:
     legend = extra.pop("legend", dict(orientation="h", yanchor="bottom", y=1.02, x=0,
                                       font=dict(size=12)))

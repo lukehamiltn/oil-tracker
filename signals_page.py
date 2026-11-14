@@ -224,13 +224,7 @@ def gap_section(series: pd.Series, s: dict, key: str, title: str, color: str,
     fig.update_layout(margin=dict(l=8, r=8, t=36, b=8))
     fig.update_xaxes(range=[since.index[-1] - pd.DateOffset(years=3),
                             since.index[-1] + pd.Timedelta(days=15)],
-                     rangeselector=dict(buttons=[
-                         dict(count=1, label="1 year", step="year", stepmode="backward"),
-                         dict(count=3, label="3 years", step="year", stepmode="backward"),
-                         dict(step="all", label="Since 2015")],
-                         x=1, xanchor="right", y=1.02, yanchor="bottom", bgcolor="#ffffff",
-                         activecolor="#dbe5f1", bordercolor="#e1e0d9", borderwidth=1,
-                         font=dict(size=12)))
+                     rangeselector=ui.range_buttons([1, 3], "Since 2015"))
     st.plotly_chart(fig, width="stretch", config=ui.CHART_CONFIG, key=f"gap_{key}")
     ui.tip(explain + f" The shaded band is the typical range (middle 80% of days since 2015); the "
            f"dotted line is the median, ${s['median']:.2f}.",

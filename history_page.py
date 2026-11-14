@@ -126,13 +126,7 @@ def timeline_chart(prices: pd.Series, events: pd.DataFrame, market: str, chosen=
                    yaxis_title=f"{label} ({'index' if market == 'DOLLAR' else 'USD'})",
                    dragmode="pan")
     fig.update_xaxes(range=[start, end + pd.Timedelta(days=20)],
-                     rangeselector=dict(buttons=[
-                         dict(count=1, label="1 year", step="year", stepmode="backward"),
-                         dict(count=5, label="5 years", step="year", stepmode="backward"),
-                         dict(count=10, label="10 years", step="year", stepmode="backward"),
-                         dict(step="all", label="All")], x=1, xanchor="right", y=1.0,
-                         yanchor="bottom", bgcolor="#ffffff", activecolor="#dbe5f1",
-                         bordercolor="#e1e0d9", borderwidth=1, font=dict(size=13)))
+                     rangeselector=ui.range_buttons([1, 5, 10], y=1.0))
     # Fit the price axis to the years on screen (double-click the chart to refit)
     pad = (high - low) * 0.08
     fig.update_yaxes(range=[low - pad, high + pad])

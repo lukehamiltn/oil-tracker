@@ -15,7 +15,6 @@ Pure calculations (no Streamlit); the Market signals tab draws them
     python signals.py snapshot    # save today's curve (run by news.yml)
 """
 
-import datetime as dt
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path

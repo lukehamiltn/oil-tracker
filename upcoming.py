@@ -14,7 +14,6 @@ from pathlib import Path
 import pandas as pd
 from pandas.tseries.holiday import USFederalHolidayCalendar
 
-import markets as mk
 
 PATH = Path(__file__).parent / "events" / "upcoming.csv"
 TZ = "America/New_York"

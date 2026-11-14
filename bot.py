@@ -20,7 +20,6 @@ Run it yourself with:
 """
 
 import argparse
-import os
 from datetime import datetime, timedelta, timezone
 
 import pandas as pd
@@ -31,10 +30,10 @@ from alpaca.data.timeframe import TimeFrame
 from alpaca.trading.client import TradingClient
 from alpaca.trading.enums import OrderSide, QueryOrderStatus, TimeInForce
 from alpaca.trading.requests import GetOrdersRequest, MarketOrderRequest
-from dotenv import load_dotenv
 
 import market_data as md
 import strategies as strat
+import credentials
 
 SYMBOL = "BNO"
 BOTS = {
@@ -50,8 +49,7 @@ TRADE_WINDOW = timedelta(hours=2)     # only trade in the last 2 hours before th
 # Connections
 # ---------------------------------------------------------------------------
 def keys() -> tuple[str, str]:
-    load_dotenv()  # reads .env locally; on GitHub the keys come from secrets
-    return os.environ["ALPACA_API_KEY"], os.environ["ALPACA_SECRET_KEY"]
+    return credentials.alpaca()   # GitHub secrets, .env locally, or Streamlit secrets
 
 
 def trading_client() -> TradingClient:

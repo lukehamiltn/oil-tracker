@@ -21,11 +21,9 @@ Run it with:
 """
 
 import html
-import os
 import re
 import sys
 import time
-from urllib.parse import quote
 from pathlib import Path
 
 import pandas as pd
@@ -33,6 +31,7 @@ import requests
 
 import flash_sources
 import news
+import credentials
 
 NEWS_URL = "https://data.alpaca.markets/v1beta1/news"
 ARCHIVE_DIR = Path(__file__).parent / "news_data" / "market_news"
@@ -54,22 +53,9 @@ OIL_WORDS = (r"\boil|crude|opec|brent|\bwti\b|barrel|gasoline|diesel|refin|pipel
 # Talking to Alpaca
 # ---------------------------------------------------------------------------
 def _headers() -> dict:
-    """Alpaca keys: from the environment (GitHub), .env (local) or Streamlit secrets."""
-    if "ALPACA_API_KEY" not in os.environ:
-        try:
-            from dotenv import load_dotenv
-            load_dotenv()
-        except ImportError:
-            pass
-    if "ALPACA_API_KEY" not in os.environ:
-        try:
-            import streamlit as st
-            for name in ("ALPACA_API_KEY", "ALPACA_SECRET_KEY"):
-                os.environ.setdefault(name, st.secrets[name])
-        except Exception:
-            pass
-    return {"APCA-API-KEY-ID": os.environ["ALPACA_API_KEY"],
-            "APCA-API-SECRET-KEY": os.environ["ALPACA_SECRET_KEY"]}
+    """Alpaca keys as request headers (see credentials.py)."""
+    key, secret = credentials.alpaca()
+    return {"APCA-API-KEY-ID": key, "APCA-API-SECRET-KEY": secret}
 
 
 def _clean(text: str, limit: int) -> str:

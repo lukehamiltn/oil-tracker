@@ -19,7 +19,6 @@ import plotly.graph_objects as go
 import streamlit as st
 
 import daily_move as dm
-import event_study as es
 import flash_sources
 import market_news as mn
 import markets as mk

@@ -155,12 +155,7 @@ def timeline(key, story, cov, waves, latest, brent) -> None:
                       line_width=0, layer="below")
     start = max(since, latest["start"] - pd.DateOffset(years=2))
     fig.update_xaxes(range=[start, cov.index[-1] + pd.Timedelta(days=10)], gridcolor=ui.GRID)
-    fig.update_xaxes(rangeselector=dict(buttons=[
-        dict(count=1, label="1 year", step="year", stepmode="backward"),
-        dict(count=3, label="3 years", step="year", stepmode="backward"),
-        dict(step="all", label="Since 2015")], x=1, xanchor="right", y=1.02, yanchor="bottom",
-        bgcolor="#ffffff", activecolor="#dbe5f1", bordercolor="#e1e0d9", borderwidth=1,
-        font=dict(size=12)), row=1, col=1)
+    fig.update_xaxes(rangeselector=ui.range_buttons([1, 3], "Since 2015"), row=1, col=1)
     fig.update_yaxes(title_text="Brent ($)", tickprefix="$", row=1, col=1, gridcolor=ui.GRID)
     fig.update_yaxes(title_text="× normal", row=2, col=1, gridcolor=ui.GRID, rangemode="tozero")
     fig.update_layout(height=470, margin=dict(l=8, r=8, t=36, b=8), showlegend=False,

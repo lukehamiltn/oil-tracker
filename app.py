@@ -29,6 +29,7 @@ import alerts
 import live_prices
 import methodology
 import glossary
+import credentials
 import signals
 import signals_page
 import inventory_events as inv
@@ -58,7 +59,7 @@ st.set_page_config(page_title="Oil Tracker · oil news and market history",
 # loaded, so new app.py + old ui.py = crash. Reload them (dependencies first)
 # whenever any of them changed on disk, and once when the server starts.
 # ---------------------------------------------------------------------------
-OWN_MODULES = [es, inv, md, fed, fetch_prices, strat, bt, bot, mediacloud_news, news, news_feeds, flash_sources, mn, upcoming, recap, mk, ui, daily_move, live_prices,
+OWN_MODULES = [credentials, es, inv, md, fed, fetch_prices, strat, bt, bot, mediacloud_news, news, news_feeds, flash_sources, mn, upcoming, recap, mk, ui, daily_move, live_prices,
                storylines, conditions, lab_page, bot_dashboard, storylines_page, news_page, history_page,
                methodology, glossary, signals, signals_page, alerts]
 
@@ -173,9 +174,7 @@ data = get_data()
 prices = data["prices"]
 
 st.write("")
-@st.cache_data(ttl=5 * 60, show_spinner=False)
-def live_quote(market: str) -> dict | None:
-    return live_prices.quote(market)       # shared by all visitors, refreshed every 5 min
+live_quote = news_page.live_quote       # shared by all visitors, refreshed every 5 min
 
 
 def price_card(label: str, market: str) -> tuple:

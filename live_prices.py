@@ -15,6 +15,8 @@ price and labels it with its date.
 """
 
 import sys
+import threading
+import time as _time
 from pathlib import Path
 
 import pandas as pd
@@ -30,6 +32,27 @@ SAVED_PATH = Path(__file__).parent / "news_data" / "futures_closes.csv"
 # Funds that hold the same futures, for estimates when Yahoo is down
 PROXIES = {"BRENT": "BNO", "WTI": "USO", "GASOLINE": "UGA", "NATGAS": "UNG"}
 ALPACA_DATA = "https://data.alpaca.markets/v2/stocks/{symbol}/{what}"
+
+# Several parts of the page ask for the same prices; keep each answer for a
+# few minutes so Yahoo is asked once (faster, and less likely to be blocked)
+_MEMO: dict = {}
+_MEMO_LOCK = threading.Lock()
+MEMO_SECONDS = 10 * 60
+
+
+def _remember(key, make):
+    now = _time.time()
+    with _MEMO_LOCK:
+        hit = _MEMO.get(key)
+    if hit and now - hit[0] < MEMO_SECONDS:
+        return hit[1]
+    value = make()
+    if value is not None and not (isinstance(value, pd.Series) and value.empty):
+        with _MEMO_LOCK:
+            for old in [k for k, (t, _) in _MEMO.items() if now - t >= MEMO_SECONDS]:
+                del _MEMO[old]
+            _MEMO[key] = (now, value)
+    return value
 
 
 def _yahoo_quote(market: str, timeout: float = 6) -> dict | None:
@@ -179,15 +202,18 @@ def backup_quote(market: str) -> dict | None:
 def quote(market: str, timeout: float = 6) -> dict | None:
     """{'price', 'change_pct' (vs previous close), 'time' (New York)}, from
     Yahoo, else estimated from an oil fund (then also 'estimated': the fund),
-    else None."""
-    return _yahoo_quote(market, timeout) or backup_quote(market)
+    else None. Kept for 5 minutes."""
+    return _remember(("quote", market, int(_time.time() // 300)),
+                     lambda: _yahoo_quote(market, timeout) or backup_quote(market))
 
 
 def daily_closes(market: str, timeout: float = 8, span: str = "3mo") -> pd.Series:
     """Daily futures closes (see _yahoo_closes); estimated from saved closes
     and an oil fund if Yahoo doesn't answer."""
-    closes = _yahoo_closes(market, timeout, span)
-    return closes if len(closes) else backup_closes(market)
+    def get():
+        closes = _yahoo_closes(market, timeout, span)
+        return closes if len(closes) else backup_closes(market)
+    return _remember(("closes", market, span), get).copy()
 
 
 def extend(prices: pd.Series, market: str = "BRENT") -> tuple[pd.Series, int]:

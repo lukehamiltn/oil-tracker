@@ -27,6 +27,7 @@ from pathlib import Path
 import pandas as pd
 
 import news
+import credentials
 
 PATH = Path(__file__).parent / "news_data" / "mc_timelines.csv"
 HISTORY_START = dt.date(2015, 1, 1)
@@ -37,14 +38,8 @@ WAIT_SECONDS = 31          # some Media Cloud endpoints allow 2 requests a minut
 
 
 def api_key() -> str | None:
-    key = os.environ.get("MEDIACLOUD_API_KEY")
-    if not key:
-        try:
-            from dotenv import dotenv_values
-            key = dotenv_values(Path(__file__).parent / ".env").get("MEDIACLOUD_API_KEY")
-        except ImportError:
-            pass
-    return key
+    credentials.load(("MEDIACLOUD_API_KEY",))
+    return os.environ.get("MEDIACLOUD_API_KEY")
 
 
 def to_mediacloud(query: str) -> str:

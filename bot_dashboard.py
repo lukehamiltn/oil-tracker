@@ -3,7 +3,6 @@ The "Paper trading bots" tab of the website. Reads the bots' fake-money
 account from Alpaca (read-only here - all trading happens in bot.py).
 """
 
-import os
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -11,22 +10,13 @@ import streamlit as st
 
 import bot
 import ui
+import credentials
 
 BOT_COLORS = {"weak_dollar": "#2a78d6", "trend_200d": "#eb6834"}
 
 
 def _load_keys_into_env() -> bool:
-    """Use Streamlit Cloud's secrets if present (locally, bot.keys() reads .env)."""
-    try:
-        for name in ("ALPACA_API_KEY", "ALPACA_SECRET_KEY"):
-            os.environ.setdefault(name, st.secrets[name])
-    except Exception:
-        pass
-    try:
-        bot.keys()
-        return True
-    except KeyError:
-        return False
+    return credentials.load()
 
 
 @st.cache_data(ttl=5 * 60, show_spinner="Checking the bots' account...")
