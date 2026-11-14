@@ -106,9 +106,14 @@ def main(dry_run: bool = False) -> None:
     for r in due:
         title = f"{r.label}: news coverage {r.heat:.1f}x normal"
         lines = []
+        if pd.notna(getattr(r, "distinct", float("nan"))):
+            lines.append(f"{r.articles_3d:,} articles, {int(r.distinct)}"
+                         f"{'+' if r.distinct_capped else ''} distinct stories.")
         if r.one_day:
             lines.append(f"Mostly one day: {r.peak_articles} of {r.articles_3d} stories came on "
-                         f"{r.peak_day:%b} {r.peak_day.day}.")
+                         f"{r.peak_day:%b} {r.peak_day.day}"
+                         + (", OPEC's monthly report day (no policy decision)."
+                            if getattr(r, "report_day", False) else "."))
         headline = latest_headline(archive, r.topic)
         if headline:
             lines.append(f"Latest: {headline}")

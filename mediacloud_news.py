@@ -96,18 +96,23 @@ def topic_stories(search, key_: str, start: dt.date, end: dt.date) -> pd.DataFra
             break
         time.sleep(WAIT_SECONDS)
     columns = ["topic", "time", "headline", "url", "source", "copies"]
+    capped = bool(token)          # more pages left: the count is a lower bound
     if not rows:
         return pd.DataFrame(columns=columns)
     t = pd.DataFrame(rows)
     t = t[t["title"].map(lambda title: key_ in news.classify(str(title)))]
     if t.empty:
-        return pd.DataFrame(columns=columns)
+        out = pd.DataFrame(columns=columns)
+        out.attrs["capped"] = capped
+        return out
     t["key"] = t["title"].map(_title_key)
     t["copies"] = t.groupby("key")["key"].transform("size")
     t = t.sort_values("publish_date").drop_duplicates("key")      # the first to publish it
-    return pd.DataFrame({"topic": key_, "time": pd.to_datetime(t["publish_date"]),
-                         "headline": t["title"], "url": t["url"], "source": t["media_name"],
-                         "copies": t["copies"]})[columns]
+    out = pd.DataFrame({"topic": key_, "time": pd.to_datetime(t["publish_date"]),
+                        "headline": t["title"], "url": t["url"], "source": t["media_name"],
+                        "copies": t["copies"]})[columns]
+    out.attrs["capped"] = capped
+    return out
 
 
 def update_stories(path: Path = STORIES_PATH) -> bool:
@@ -122,19 +127,26 @@ def update_stories(path: Path = STORIES_PATH) -> bool:
     end = dt.datetime.now(dt.timezone.utc).date()
     start = end - dt.timedelta(days=STORY_DAYS)
     old = pd.read_csv(path) if path.exists() else pd.DataFrame(columns=["topic"])
-    tables, all_ok = [], True
+    tables, counts, all_ok = [], [], True
     for i, key_ in enumerate(news.TOPICS):
         if i:
             time.sleep(WAIT_SECONDS)
         try:
             found = topic_stories(search, key_, start, end)
             print(f"{news.TOPICS[key_]['label']}: {len(found)} stories")
+            counts.append({"topic": key_, "distinct": len(found),
+                           "capped": found.attrs.get("capped", False),
+                           "updated": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")})
         except Exception as error:
             print(f"{key_}: skipped for now ({error!r}); keeping the last saved list.")
             found, all_ok = old[old["topic"] == key_], False
         tables.append(found)
     path.parent.mkdir(exist_ok=True)
     pd.concat(tables, ignore_index=True).to_csv(path, index=False)
+    # Distinct-story counts for the topic cards (topics that failed this run
+    # are left out, so their cards fall back to the plain count)
+    pd.DataFrame(counts, columns=["topic", "distinct", "capped", "updated"]).to_csv(
+        news.STORY_COUNTS_PATH, index=False)
     return all_ok
 
 

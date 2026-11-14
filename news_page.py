@@ -565,8 +565,10 @@ def now_view(data: dict) -> None:
                        f" <span class='heat-unit'>normal · only {row['articles_3d']} "
                        f"article{'s' if row['articles_3d'] != 1 else ''}</span>")
                     + ui.heat_gauge(row["heat"], color)
-                    + (f"<div class='burst'>Mostly {ui.day(row['peak_day'], year=False)}: "
-                       f"{row['peak_articles']} of {row['articles_3d']} stories</div>"
+                    + volume_line(row)
+                    + (f"<div class='burst'>Mostly {ui.day(row['peak_day'], year=False)}"
+                       f"{', OPEC monthly report day' if row.get('report_day') else ''}: "
+                       f"{row['peak_articles']} of {row['articles_3d']} articles</div>"
                        if row["enough"] and row["one_day"] and row["heat"] >= 1.5 else ""),
                     unsafe_allow_html=True)
                 # History: what happened after past spikes, and is it real?
@@ -677,6 +679,18 @@ def coverage_stories(version: float) -> pd.DataFrame:
                     topics=t["headline"].map(lambda h: news.classify(str(h))))
 
 
+def volume_line(row) -> str:
+    """'97 articles · 10 distinct stories' under a card's number (articles =
+    every page that matched, copies included; stories = different headlines
+    about the topic)."""
+    if not row["enough"] or pd.isna(row.get("distinct", float("nan"))):
+        return ""
+    n = int(row["distinct"])
+    stories = f"{n}+" if row.get("distinct_capped") else f"{n}"
+    return (f"<div class='volume'>{row['articles_3d']:,} articles · {stories} distinct "
+            f"stor{'y' if n == 1 else 'ies'}</div>")
+
+
 @st.dialog("Latest stories", width="large")
 def topic_dialog(topic: str, row, data: dict) -> None:
     """Opened by clicking a topic card: the stories behind its count, then
@@ -692,7 +706,11 @@ def topic_dialog(topic: str, row, data: dict) -> None:
     st.caption(f"{row['heat']:.1f}× normal coverage over the last 3 days: "
                f"{row['articles_3d']} articles in worldwide news."
                + (f" Mostly {ui.day(row['peak_day'], year=False)}: {row['peak_articles']} of them."
-                  if row["one_day"] else ""))
+                  if row["one_day"] else "")
+               + (f" The busiest day, {ui.day(row['peak_day'], year=False)}, was OPEC's monthly "
+                  "report day: the report brings a burst of headlines about OPEC output and "
+                  "demand forecasts, but no policy decision."
+                  if row.get("report_day") else ""))
 
     st.markdown("**The stories behind the count**")
     if len(behind):

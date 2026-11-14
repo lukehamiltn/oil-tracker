@@ -59,9 +59,22 @@ minimum, since it carries dozens of oil stories a day rather than thousands.
 
 **"Spiking" on today's topic cards** means the last 3 days averaged at least
 {news.SPIKE_RATIO:.0f}× normal coverage *and* had at least
-{news.SOURCES['world']['spike_articles']} stories between them. A high ratio on fewer
-stories shows as "Elevated". When one day carries most of the 3 days' stories, the card
+{news.SOURCES['world']['spike_articles']} articles between them. A high ratio on fewer
+articles shows as "Elevated". When one day carries most of the 3 days' articles, the card
 says so ("Mostly Nov 11"), since a one-day burst is weaker than a sustained story.
+
+**Articles vs distinct stories.** Media Cloud counts every page that matches, so one
+wire story copied onto 14 sites counts 14 times, and a page that mentions OPEC in
+passing counts too. Every 3 hours we also fetch the articles themselves, drop copies,
+and keep only those whose headline is about the topic. Cards show both numbers, and
+"Spiking" also needs at least {news.SPIKE_DISTINCT} distinct stories. The "× normal"
+ratio still uses the full counts, because that is what our history since 2015 is
+measured in (copies inflate past days about as much as today).
+
+**OPEC monthly report days.** Around the middle of each month OPEC publishes its
+Monthly Oil Market Report (output figures and demand forecasts). It brings a burst of
+OPEC headlines without any policy decision, so cards and alerts label those bursts.
+Dates come from OPEC's published schedule.
 
 **Timing.** Reactions are measured from the close one business day *before* the spike,
 so a story that broke the evening before isn't missed.

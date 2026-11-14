@@ -225,6 +225,62 @@ SOURCES = {
 # articles can push the ratio past 3x; below this it shows as "Elevated".
 ONE_DAY_SHARE = 0.6      # one day with 60%+ of the 3 days' stories = a one-day burst
 
+# Distinct stories: Media Cloud's counts include copies of the same article on
+# many sites and pages that only mention the topic in passing. The stories
+# job (mediacloud_news.py stories) counts the different stories whose headline
+# is about the topic. "Spiking" also needs at least this many of them.
+SPIKE_DISTINCT = 15
+STORY_COUNTS_PATH = Path(__file__).parent / "news_data" / "mc_story_counts.csv"
+STORY_COUNTS_MAX_AGE = pd.Timedelta(hours=12)    # older counts are ignored
+
+# OPEC's monthly report (supply/demand estimates, members' output) brings a
+# burst of OPEC headlines without any policy decision. Dates are hand-kept
+# from opec.org; months not listed fall back to the usual window (10th-16th).
+OPEC_REPORTS_PATH = Path(__file__).parent / "events" / "opec_reports.csv"
+
+
+def load_story_counts(path: Path = STORY_COUNTS_PATH) -> pd.DataFrame:
+    """Distinct stories per topic (empty if missing or out of date)."""
+    if not path.exists():
+        return pd.DataFrame(columns=["topic", "distinct", "capped", "updated"])
+    t = pd.read_csv(path, parse_dates=["updated"])
+    if t.empty or pd.Timestamp.now(tz="UTC") - t["updated"].max() > STORY_COUNTS_MAX_AGE:
+        return pd.DataFrame(columns=["topic", "distinct", "capped", "updated"])
+    return t
+
+
+def opec_report_dates(path: Path = OPEC_REPORTS_PATH) -> pd.DatetimeIndex:
+    if not path.exists():
+        return pd.DatetimeIndex([])
+    return pd.DatetimeIndex(pd.read_csv(path, parse_dates=["date"])["date"])
+
+
+def is_opec_report_day(day: pd.Timestamp, dates: pd.DatetimeIndex | None = None) -> bool:
+    """True on an OPEC monthly report day or the day after (coverage often
+    peaks the next day)."""
+    dates = opec_report_dates() if dates is None else dates
+    day = pd.Timestamp(day).normalize()
+    listed = dates[(dates.year == day.year) & (dates.month == day.month)]
+    if len(listed):
+        return any(0 <= (day - d).days <= 1 for d in listed)
+    return 10 <= day.day <= 17 and day.dayofweek < 6
+
+
+def add_details(heat: pd.DataFrame) -> pd.DataFrame:
+    """Distinct-story counts (and the stricter Spiking rule they allow), and
+    whether an OPEC burst came on a monthly report day."""
+    heat = heat.copy()
+    counts = load_story_counts().set_index("topic")
+    heat["distinct"] = heat["topic"].map(counts["distinct"]) if len(counts) else float("nan")
+    heat["distinct_capped"] = (heat["topic"].map(counts["capped"]).fillna(False).astype(bool)
+                               if len(counts) else False)
+    few = heat["distinct"].notna() & ~heat["distinct_capped"] & (heat["distinct"] < SPIKE_DISTINCT)
+    heat["big_enough"] = heat["big_enough"] & ~few
+    dates = opec_report_dates()
+    heat["report_day"] = [(t == "opec" and pd.notna(d) and is_opec_report_day(d, dates))
+                          for t, d in zip(heat["topic"], heat["peak_day"])]
+    return heat
+
 
 def coverage(t: pd.DataFrame, source: str = "world") -> pd.DataFrame:
     """Add each day's share of all news, the 'normal' share and the ratio."""
@@ -333,9 +389,15 @@ def heat_now(timelines: pd.DataFrame, market_timelines: pd.DataFrame) -> tuple[p
     heat = current_heat(timelines)
     today = pd.Timestamp.now(tz="UTC").tz_localize(None).normalize()
     if not heat.empty and heat["last_day"].max() >= today - pd.Timedelta(days=4):
-        return heat, "world"
+        return add_details(heat), "world"
     market = current_heat(market_timelines, "market")
-    return (market, "market") if not market.empty else (heat, "world")
+    if not market.empty:
+        market = market.assign(distinct=float("nan"), distinct_capped=False)
+        dates = opec_report_dates()
+        market["report_day"] = [(t == "opec" and is_opec_report_day(d, dates))
+                                for t, d in zip(market["topic"], market["peak_day"])]
+        return market, "market"
+    return add_details(heat), "world"
 
 
 # ---------------------------------------------------------------------------

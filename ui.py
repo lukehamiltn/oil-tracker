@@ -292,6 +292,7 @@ CARD_CSS = """
 [class*="st-key-heat_card_"] [class*="st-key-open_"] p { font-size: 0.8rem; font-weight: 600; }
 [class*="st-key-heat_card_"]:hover [class*="st-key-open_"] p { text-decoration: underline; }
 .verdict-wrap { z-index: 2; }
+.volume { font-size: 0.78rem; color: #6d6c67; margin-top: 0.15rem; }
 .term-group { font-family: "Source Serif 4", Georgia, serif; font-size: 1.15rem; font-weight: 700;
     color: #1d1d1b; margin: 1rem 0 0.3rem; }
 .term { display: grid; grid-template-columns: 13rem 1fr; gap: 1rem; padding: 0.5rem 0;

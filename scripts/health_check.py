@@ -80,6 +80,9 @@ def check_site() -> list[str]:
             problems.append(f"News: only {heads} headlines shown.")
         if frame.get_by_text("live price unavailable").count():
             problems.append("Header: live oil prices are unavailable (showing last official price).")
+        if frame.get_by_text("estimated from the").count():
+            problems.append("Header: Yahoo isn't answering; prices are estimated from oil funds "
+                            "(BNO/USO). Fine for a while; check if it lasts.")
         if frame.get_by_text("Headlines are temporarily unavailable").count():
             problems.append("News: headlines are unavailable.")
 
@@ -141,6 +144,13 @@ def check_data() -> list[str]:
             if not (ahead["kind"] == kind).any():
                 problems.append(f"Calendar: no upcoming {name} dates - add the next ones to "
                                 "events/upcoming.csv.")
+    # OPEC monthly report dates (events/opec_reports.csv, from opec.org)
+    reports = ROOT / "events" / "opec_reports.csv"
+    if reports.exists():
+        dates = pd.read_csv(reports, parse_dates=["date"])["date"]
+        if not (dates >= now.tz_localize(None).normalize()).any():
+            problems.append("Calendar: no upcoming OPEC monthly report dates - add next year's "
+                            "from opec.org to events/opec_reports.csv.")
     return problems
 
 

@@ -189,6 +189,8 @@ def price_card(label: str, market: str) -> tuple:
         today = pd.Timestamp.now(tz=t.tz).date() == t.date()
         when = clock if today else f"{t:%b} {t.day}, {clock}"
         note = (f"{arrow} {change:+.1f}% · {when}" if change is not None else when)
+        if q.get("estimated"):
+            note += f" · estimated from the {q['estimated']} oil fund"
         return (label, f"${q['price']:.2f}", note, color)
     series = data["markets"][market]
     return (label, f"${series.iloc[-1]:.2f}",
@@ -210,6 +212,8 @@ def header_cards() -> None:
                 else f"quiet news day: top topic at {top['heat']:.1f}× normal")
         if top["heat"] >= 1.5 and top["one_day"]:
             note += f", mostly on {ui.day(top['peak_day'], year=False)}"
+            if top.get("report_day"):
+                note += " (OPEC's monthly report)"
         story = ("Biggest oil story now", top["label"], note, None)
     ui.kpi_row([
         price_card("Brent crude", "BRENT"),
@@ -219,7 +223,28 @@ def header_cards() -> None:
     ])
     st.caption(f"Prices: front-month futures, about 10 min delayed. Charts and research use "
                f"official daily spot prices, published about a week late (latest "
-               f"{ui.day(prices.index[-1], year=False)}).")
+               f"{ui.day(prices.index[-1], year=False)}).{spot_gap_note()}")
+
+
+@st.cache_data(ttl=60 * 60, show_spinner=False)
+def spot_gap_note() -> str:
+    """When the official spot price and futures disagree a lot (as when physical
+    oil is scarce), say so: charts carry the spot price forward, so they end
+    higher or lower than the live price above."""
+    futures = live_prices.daily_closes("BRENT")
+    day = prices.index[-1]
+    same = futures[futures.index <= day]
+    if same.empty or (day - same.index[-1]).days > 3:
+        return ""
+    gap = (prices.iloc[-1] / same.iloc[-1] - 1) * 100
+    if abs(gap) < 3:
+        return ""
+    word = "above" if gap > 0 else "below"
+    why = (" because physical oil for immediate delivery is scarce" if gap > 0 else
+           " because there's more physical oil than buyers need right now")
+    return (f" Right now the official Brent spot price is running {abs(gap):.0f}% {word} "
+            f"futures{why}, so charts that carry it to today end "
+            f"{'higher' if gap > 0 else 'lower'} than the price above.")
 
 
 header_cards()

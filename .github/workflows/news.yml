@@ -51,6 +51,10 @@ jobs:
         env:
           MEDIACLOUD_API_KEY: ${{ secrets.MEDIACLOUD_API_KEY }}
         run: python -u storylines.py update
+      - name: Save futures closes (backup for live prices)
+        continue-on-error: true
+        timeout-minutes: 3
+        run: python -u live_prices.py save
       - name: Save today's futures curve
         continue-on-error: true
         timeout-minutes: 3
