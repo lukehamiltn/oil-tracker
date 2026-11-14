@@ -389,13 +389,19 @@ def week_in_review(data: dict) -> None:
     # 4. Track record
     record = recap.track_record(data, prices)
     if len(record):
-        hits, total = int(record["right_way"].sum()), len(record)
+        hits, total = int(record["right_way"].astype(bool).sum()), len(record)
         st.markdown("**Track record**")
         ui.kpi_row([("History pointed the right way", f"{hits} of {total}",
                      f"{hits / total:.0%} of news spikes, OPEC+ and Fed decisions and big EIA "
                      "surprises in the last 6 months", None)], columns=1)
-        st.caption("Close to a coin flip, which fits the site's 'could be noise' labels: the "
-                   "averages here describe what usually happened, they are not forecasts.")
+        if 0.35 <= hits / total <= 0.65:
+            st.caption("Close to a coin flip, which fits the site's 'could be noise' labels: "
+                       "the averages here describe what usually happened, they are not "
+                       "forecasts.")
+        else:
+            st.caption(f"{total} events is a small sample, so this can swing a lot from month "
+                       "to month. The averages here describe what usually happened, they are "
+                       "not forecasts.")
 
 
 def coming_up(data: dict) -> None:
@@ -563,7 +569,7 @@ def now_view(data: dict) -> None:
                     + f"<div class='card-title'>{row['label']}</div>"
                     + f"<span class='heat-num' style='color:{number_color}'>{row['heat']:.1f}×</span>"
                     + (" <span class='heat-unit'>normal coverage</span>" if row["enough"] else
-                       f" <span class='heat-unit'>normal · only {row['articles_3d']} "
+                       f" <span class='heat-unit'>normal · {row['articles_3d']} "
                        f"article{'s' if row['articles_3d'] != 1 else ''}</span>")
                     + ui.heat_gauge(row["heat"], color)
                     + volume_line(row)
@@ -688,8 +694,8 @@ def volume_line(row) -> str:
         return ""
     n = int(row["distinct"])
     stories = f"{n}+" if row.get("distinct_capped") else f"{n}"
-    return (f"<div class='volume'>{row['articles_3d']:,} articles · {stories} distinct "
-            f"stor{'y' if n == 1 else 'ies'}</div>")
+    return (f"<div class='volume'>{stories} stor{'y' if n == 1 else 'ies'} · "
+            f"{row['articles_3d']:,} articles</div>")
 
 
 @st.dialog("Latest stories", width="large")
@@ -856,7 +862,8 @@ def like_this_before(data, archive, heads) -> None:
     ui.market_reaction_table(by_market, data["typical"], key="like", sig=data["sig"])
     ui.tip("Similarity is based on shared wording (rare words like place and company "
                "names count most), so check the headlines to judge how alike the stories "
-               "really are. With about 10 matches, one big move can swing the average.")
+               "really are. With about 10 matches, one big move can swing the average.",
+           "How matches are found")
 
 
 @st.fragment

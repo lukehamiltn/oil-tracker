@@ -44,15 +44,15 @@ def render(data: dict) -> None:
     bw, margin = sg.standing(table["brent_wti"]), sg.standing(table["margin"])
 
     cards = []
-    if shape:
-        cards.append(("Brent futures curve", shape["shape"].capitalize(),
-                      curve_note(shape), None))
     cards.append(("Brent minus WTI", f"${bw['now']:.2f}",
                   f"{sg.level_word(bw['pct_below'])} · typical ${bw['low']:.0f}–"
                   f"{bw['high']:.0f} since 2015", None))
     cards.append(("Refining margin", f"${margin['now']:.2f}",
                   f"per barrel · {sg.level_word(margin['pct_below'])} · typical "
                   f"${margin['low']:.0f}–{margin['high']:.0f} since 2015", None))
+    if shape:        # last, so on a phone this long word gets a full-width card
+        cards.append(("Brent futures curve", shape["shape"].capitalize(),
+                      curve_note(shape), None))
     ui.kpi_row(cards, columns=len(cards))
     st.write("")
 

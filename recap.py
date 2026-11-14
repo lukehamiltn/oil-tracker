@@ -196,6 +196,6 @@ def weekly_message(data: dict) -> tuple[str, str]:
     record = track_record(data, prices)
     if len(record):
         lines.append(f"Track record (6 months): history pointed the right way "
-                     f"{int(record['right_way'].sum())} of {len(record)} times.")
+                     f"{int(record['right_way'].astype(bool).sum())} of {len(record)} times.")
     lines.append("History, not a forecast.")
     return title, "\n".join(lines)

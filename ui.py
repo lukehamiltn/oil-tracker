@@ -94,14 +94,23 @@ h3 { letter-spacing: -0.005em; }
 /* "Show more" under the headline list */
 .more-count { font-size: 0.8rem; color: #898781; }
 /* Header cards */
-.kpi-row { display: grid; grid-template-columns: repeat(var(--cols, 4), 1fr); gap: 1rem; margin-bottom: 0.5rem; }
-@media (max-width: 800px) { .kpi-row { grid-template-columns: repeat(2, 1fr); } }
+.kpi-row { display: grid; grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr)); gap: 1rem; margin-bottom: 0.5rem; }
+@media (max-width: 800px) {
+  .kpi-row { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.6rem; }
+  /* an odd card out at the end takes the full width instead of half */
+  .kpi-row > .kpi:last-child:nth-child(odd) { grid-column: 1 / -1; }
+}
 /* Phones */
 .masthead svg { flex-shrink: 0; }
 @media (max-width: 640px) {
   .masthead { align-items: flex-start; }
   .masthead .wordmark { font-size: 1.6rem; }
   .masthead .dek { font-size: 0.85rem; }
+  /* cards: smaller numbers and words so a value fits on one or two lines */
+  .kpi { padding: 0.75rem 0.8rem; }
+  .kpi-value { font-size: 1.25rem !important; line-height: 1.25; }
+  .kpi-label { font-size: 0.8rem; }
+  .kpi-note { font-size: 0.76rem !important; }
   /* rows of buttons wrap instead of running off the screen */
   [data-testid="stButtonGroup"] > div { flex-wrap: wrap !important; }
   /* topic cards: no reserved second line when a title fits on one */
