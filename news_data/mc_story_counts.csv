@@ -1,9 +1,8 @@
 topic,distinct,capped,updated
-shipping,89,True,2026-11-15T16:21:02+00:00
-infrastructure,8,False,2026-11-15T16:22:12+00:00
-sanctions,12,False,2026-11-15T16:23:55+00:00
-opec,4,False,2026-11-15T16:24:27+00:00
-middle_east,168,True,2026-11-15T16:26:33+00:00
-hurricane,0,False,2026-11-15T16:27:36+00:00
-demand,1,False,2026-11-15T16:28:40+00:00
-spr,1,False,2026-11-15T16:29:11+00:00
+shipping,93,True,2026-11-15T19:29:08+00:00
+infrastructure,8,False,2026-11-15T19:30:12+00:00
+sanctions,15,False,2026-11-15T19:31:47+00:00
+opec,4,False,2026-11-15T19:32:19+00:00
+middle_east,169,True,2026-11-15T19:34:25+00:00
+hurricane,0,False,2026-11-15T19:34:57+00:00
+demand,1,False,2026-11-15T19:35:30+00:00
