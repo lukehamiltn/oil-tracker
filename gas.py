@@ -3,9 +3,10 @@ The natural gas site (the /gas page).
 
   header   live Henry Hub price, the next storage report, the latest report's
            surprise, and the gas story getting the most extra coverage
-  News     why gas moved today, the 2-week weather outlook, gas news topics
-           with what Henry Hub did after past spikes, what's coming up, and the
-           latest gas headlines
+  News     Today: why gas moved, the 2-week weather outlook, gas news topics
+           (click one for its stories), what's coming up, and the latest gas
+           headlines, each with what Henry Hub did after similar past stories.
+           Also: Like this before, Topics over time, and Search (gas_news.py)
   Week in review  how gas moved each week, the storage report, what made the
            news, and what history suggested vs what happened
   Storage  storage against the last 5 years, and the weekly EIA report: how
@@ -22,7 +23,6 @@ event_study.py (price reactions), markets.py (is a pattern real?), ui.py.
 """
 
 import html
-import re
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -33,6 +33,7 @@ import conditions
 import daily_move as dm
 import event_study as es
 import fetch_prices
+import gas_news
 import gas_review
 import gas_storage as gs
 import glossary
@@ -51,9 +52,7 @@ import weather
 ui.apply_styles()
 
 MARKET = "NATGAS"
-# ("gas prices" alone usually means petrol at the pump, so it isn't matched)
-GAS_TERMS = re.compile(r"natural gas|\bnat ?gas\b|\blng\b|henry hub|gas (storage|field|pipeline|export|supplies)"
-                       r"|gazprom|nord stream|\bttf\b|liquefied", re.I)
+GAS_TERMS = gas_news.GAS_TERMS
 
 
 # Data ---------------------------------------------------------------------------
@@ -287,16 +286,24 @@ def weather_section() -> None:
            "plants. Forecast from Open-Meteo; normal is the 2015-2024 average for each date.", "How to read this")
 
 
-def headline_rows(heads: pd.DataFrame) -> None:
+def headline_rows(heads: pd.DataFrame, history: bool = True) -> None:
+    """Gas headlines; with `history`, each gets a 'Last time' line (what Henry
+    Hub did after similar past stories), when there are enough close matches."""
+    archive = news_archive() if history else pd.DataFrame()
     rows = []
     for _, h in heads.iterrows():
+        try:
+            past = gas_news.history_line(h, prices, archive, data["sig"]) if history else ""
+        except Exception as error:
+            print(f"No history line: {error!r}")
+            past = ""
         title = html.escape(ui.headline_case(str(h["headline"])))
         link = f'<a href="{html.escape(str(h["url"]))}" target="_blank" rel="noopener">{title}</a>'
         summary = html.escape(str(h.get("summary") or ""))[:220]
         chips = "".join(ui.chip(news.topic_info(t)["label"], news.topic_info(t)["color"]) for t in h["topics"])
         rows.append(f'<div class="headline">{link}<div class="summary">{summary}</div>'
                     f'<div class="meta">{chips}<span class="publisher">{html.escape(str(h["source"]))}</span>'
-                    f' · {news_page._ago(h["time"])}</div></div>')
+                    f' · {news_page._ago(h["time"])}</div>{past}</div>')
     st.markdown("".join(rows), unsafe_allow_html=True)
 
 
@@ -333,6 +340,9 @@ def topic_cards() -> None:
                             unsafe_allow_html=True)
             else:
                 st.caption("No past spikes to compare with yet.")
+            if st.button("Latest stories →", key=f"gas_stories_{row['topic']}", type="tertiary"):
+                gas_news.topic_dialog(row["topic"], row, gas_headlines(), news_archive(),
+                                      lambda rows: headline_rows(rows, history=False))
 
 
 def coming_up() -> None:
@@ -363,21 +373,31 @@ def headlines() -> None:
         st.info("No natural gas headlines in the last day or two.")
         return
     headline_rows(heads.head(12))
-    ui.tip("Articles from our publishers' news feeds that mention natural gas, LNG or Henry Hub, newest first.",
+    ui.tip("Articles from our publishers' news feeds that mention natural gas, LNG or Henry Hub, newest first. "
+           "\"Last time\" shows what Henry Hub did the week after past gas stories worded most like it "
+           "(only when there are enough close matches); \"See them\" opens them in Like this before.",
            "About these stories")
 
 
 with tab_news:
     try:
-        why_today()
-        st.write("")
-        weather_section()
-        st.write("")
-        topic_cards()
-        st.write("")
-        coming_up()
-        st.write("")
-        headlines()
+        view = gas_news.pick_view()
+        if view == "like":
+            gas_news.like_this_before(prices, data["sig"], gas_headlines(), news_archive())
+        elif view == "topics":
+            gas_news.topics_view(prices, data, news_archive())
+        elif view == "search":
+            gas_news.search_view(prices, data["sig"], news_archive())
+        else:
+            why_today()
+            st.write("")
+            weather_section()
+            st.write("")
+            topic_cards()
+            st.write("")
+            coming_up()
+            st.write("")
+            headlines()
     except Exception as error:
         st.error(f"This section hit a problem: {error}")
 

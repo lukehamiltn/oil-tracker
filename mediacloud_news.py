@@ -47,7 +47,13 @@ def to_mediacloud(query: str) -> str:
     """Our topic searches put groups side by side to mean "and" (GDELT style);
     Media Cloud needs the AND written out."""
     parts = re.findall(r'\([^)]*\)|"[^"]*"|\S+', query)
-    return " AND ".join(parts)
+    words = ("AND", "OR", "NOT")
+    out = []
+    for part in parts:          # (no AND around an OR someone typed)
+        if out and part.upper() not in words and out[-1].upper() not in words:
+            out.append("AND")
+        out.append(part.upper() if part.upper() in words else part)
+    return " ".join(out)
 
 
 def counts(search, query: str, start: dt.date, end: dt.date, tries: int = 3) -> pd.DataFrame:

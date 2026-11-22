@@ -248,12 +248,13 @@ def topic_match(window: pd.DataFrame, spike) -> pd.Series:
 # ---------------------------------------------------------------------------
 # "Like this before": past headlines most similar to a given headline
 # ---------------------------------------------------------------------------
-def build_matcher(archive: pd.DataFrame):
+def build_matcher(archive: pd.DataFrame, related=None):
     """Turn every oil-related story into a word-weight vector (TF-IDF): words
     that are rare across the archive (e.g. "Abqaiq") count for more than
-    common ones (e.g. "oil"). The headline counts double vs the summary."""
+    common ones (e.g. "oil"). The headline counts double vs the summary.
+    `related` picks which stories to use (default: oil-related ones)."""
     from sklearn.feature_extraction.text import TfidfVectorizer
-    pool = oil_related(archive)
+    pool = (related or oil_related)(archive)
     vectorizer = TfidfVectorizer(stop_words="english", ngram_range=(1, 2), min_df=2,
                                  max_df=0.3, sublinear_tf=True)
     matrix = vectorizer.fit_transform(pool["headline"] + " " + pool["headline"] + " "
