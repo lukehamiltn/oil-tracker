@@ -494,8 +494,10 @@ def style_event_chart(fig: go.Figure, y_title: str, height: int = 400) -> go.Fig
                        yaxis_title=y_title, yaxis_ticksuffix="%")
 
 
-def average_path(paths: dict, dates) -> pd.Series:
-    return pd.concat([paths[d] for d in dates], axis=1).mean(axis=1)
+def average_path(paths: dict, dates, center: str = "mean") -> pd.Series:
+    """The average path (or with center="median", the typical one)."""
+    table = pd.concat([paths[d] for d in dates], axis=1)
+    return table.median(axis=1) if center == "median" else table.mean(axis=1)
 
 
 # ---------------------------------------------------------------------------
@@ -503,9 +505,11 @@ def average_path(paths: dict, dates) -> pd.Series:
 # ---------------------------------------------------------------------------
 @st.fragment
 def comparison_section(prices, results, paths, cat_col, categories, labels, colors, key,
-                       market: str = "Brent", sig=None, market_key: str = "BRENT"):
+                       market: str = "Brent", sig=None, market_key: str = "BRENT", center: str = "mean"):
     """Average price path for every category, plus a summary table.
+    center="median" shows the typical (median) move instead of the average.
     (A fragment: changing its options only redraws this section.)"""
+    typical = center == "median"
     if results.empty:
         st.info(f"No events of this kind have {market} price data yet.")
         return
@@ -514,19 +518,19 @@ def comparison_section(prices, results, paths, cat_col, categories, labels, colo
         dates = results.loc[results[cat_col] == cat, "date"]
         if dates.empty:
             continue
-        avg = average_path(paths, dates)
+        avg = average_path(paths, dates, center)
         fig.add_trace(go.Scatter(
             x=avg.index, y=avg.values, mode="lines", name=f"{labels[cat]} ({len(dates)})",
             line=dict(color=colors[cat], width=2.5), hovertemplate="%{y:+.1f}%"))
-    st.plotly_chart(style_event_chart(fig, f"Average % change in {market}"), width="stretch", config=CHART_CONFIG,
-                    key=f"{key}_avg_chart")
+    st.plotly_chart(style_event_chart(fig, f"{'Typical' if typical else 'Average'} % change in {market}"),
+                    width="stretch", config=CHART_CONFIG, key=f"{key}_avg_chart")
 
     horizon = st.segmented_control("Measure the change after", es.HORIZONS, default=1,
                                    format_func=lambda h: HORIZON_NAMES[h].split(" (")[0],
                                    key=f"{key}_horizon") or 1
     col = f"day_{horizon}_pct"
     summary = (results.groupby(cat_col)[col]
-               .agg(events="count", average="mean",
+               .agg(events="count", average="median" if typical else "mean",
                     pct_up=lambda s: (s > 0).mean() * 100, best="max", worst="min")
                .reindex(categories).dropna(how="all"))
     if sig is not None:
@@ -538,15 +542,19 @@ def comparison_section(prices, results, paths, cat_col, categories, labels, colo
             "Pattern?", help="Could random days have produced an average this big? "
                              "See Methodology (top of the page)."),
         "events": st.column_config.NumberColumn("Events"),
-        "average": st.column_config.NumberColumn("Average", format=PCT),
+        "average": st.column_config.NumberColumn("Typical" if typical else "Average", format=PCT,
+                                                 help="The median: half the events were followed by more, "
+                                                      "half by less" if typical else None),
         "pct_up": st.column_config.NumberColumn("Times price rose", format="%.0f%%"),
         "best": st.column_config.NumberColumn("Best", format=PCT),
         "worst": st.column_config.NumberColumn("Worst", format=PCT),
     })
     tip(f"For comparison: at any ordinary time, {market}'s typical move over "
                f"{HORIZON_NAMES[horizon]} is about ±{es.typical_move(prices, horizon):.1f}%. "
-               "**Pattern?** says how unlikely the average would be on random days: "
-               "a strong pattern happens by chance less than 2% of the time.")
+               f"**Pattern?** says how unlikely the {'typical move' if typical else 'average'} would be on "
+               "random days: a strong pattern happens by chance less than 2% of the time."
+               + (" Typical (median) moves are used here because a few huge price spikes would swamp an "
+                  "average." if typical else ""))
 
 
 @st.fragment
@@ -559,8 +567,10 @@ def drilldown_section(results, paths, cat_col, categories, labels, colors,
     event_paths(group, paths, colors[cat], table_columns, key, market)
 
 
-def event_paths(group, paths, color, table_columns, key, market: str = "Brent") -> None:
-    """Chart of the price path after each event in `group`, plus its table."""
+def event_paths(group, paths, color, table_columns, key, market: str = "Brent", center: str = "mean") -> None:
+    """Chart of the price path after each event in `group`, plus its table.
+    center="median": the thick line is the typical path, not the average."""
+    middle = "Typical" if center == "median" else "Average"
     group = group.sort_values("date", ascending=False)
     if "headline" in group:
         group = group.assign(headline=group["headline"].fillna("").replace("", "—"))
@@ -577,7 +587,7 @@ def event_paths(group, paths, color, table_columns, key, market: str = "Brent") 
                 line=dict(color=color, width=1), opacity=0.3,
                 hovertemplate=f"<b>{day(event['date'])}</b><br>"
                               f"{event['description']}<br>%{{y:+.1f}}%<extra></extra>"))
-        note = "Thin lines are individual events (hover to see which). Thick line = average."
+        note = f"Thin lines are individual events (hover to see which). Thick line = {middle.lower()}."
     else:
         all_paths = pd.concat([paths[d] for d in group["date"]], axis=1)
         low, high = all_paths.quantile(0.25, axis=1), all_paths.quantile(0.75, axis=1)
@@ -589,12 +599,12 @@ def event_paths(group, paths, color, table_columns, key, market: str = "Brent") 
                                  name="Middle 50% of outcomes",
                                  hovertemplate="25th percentile: %{y:+.1f}%<extra></extra>"))
         note = ("Shaded band = where the middle half of outcomes landed. "
-                "Thick line = average. A wide band means the average isn't very reliable.")
+                f"Thick line = {middle.lower()}. A wide band means it isn't very reliable.")
 
-    avg = average_path(paths, group["date"])
-    fig.add_trace(go.Scatter(x=avg.index, y=avg.values, mode="lines", name="Average",
+    avg = average_path(paths, group["date"], center)
+    fig.add_trace(go.Scatter(x=avg.index, y=avg.values, mode="lines", name=middle,
                              line=dict(color=color, width=3.5),
-                             hovertemplate="Average: %{y:+.1f}%<extra></extra>"))
+                             hovertemplate=middle + ": %{y:+.1f}%<extra></extra>"))
     fig = style_event_chart(fig, f"% change in {market}")
     fig.update_layout(hovermode="closest" if len(group) <= 60 else "x unified")
     st.plotly_chart(fig, width="stretch", config=CHART_CONFIG, key=f"{key}_drill_chart")

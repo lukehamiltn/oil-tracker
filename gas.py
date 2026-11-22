@@ -84,7 +84,9 @@ def get_data() -> dict:
         "timelines": timelines,
         "spikes": spikes,
         "spike_react": es.compute_results(prices, spikes) if not spikes.empty else (pd.DataFrame(), {}),
-        "sig": mk.Significance({MARKET: prices}),
+        # Typical (median) moves: spot gas has rare huge spikes on very cold
+        # days (+380% in a week in January 2024) that would swamp averages
+        "sig": mk.Significance({MARKET: prices}, center="median"),
     }
 
 
@@ -333,7 +335,7 @@ def topic_cards() -> None:
                 verdict = data["sig"].verdict(p, week.notna().sum())
                 st.markdown("<div class='card-rule'></div>"
                             f"<div class='eyebrow' style='margin-top:0.4rem'>After {len(past)} past spikes</div>"
-                            f"<div class='past'>Gas <b>{week.mean():+.1f}%</b> the next week · rose "
+                            f"<div class='past'>Gas typically <b>{week.median():+.1f}%</b> the next week · rose "
                             f"{(week > 0).mean():.0%} of the time</div>"
                             + ui.verdict_badge(verdict, ui.verdict_tip(verdict, p, int(week.notna().sum()),
                                                                       "week for gas"), quiet=True),
@@ -457,9 +459,9 @@ with tab_storage:
     st.markdown(f"**Latest report ({ui.day(latest['date'], weekday=True)}):** {latest['description']}, a surprise of "
                 f"**{latest['surprise_bcf']:+.0f} Bcf** → *{gs.LABELS[latest['category']]}*.")
     results, paths = data["storage_react"]
-    st.markdown("**Average reaction in Henry Hub gas, by size of surprise**")
+    st.markdown("**Typical reaction in Henry Hub gas, by size of surprise**")
     ui.comparison_section(prices, results, paths, "category", gs.CATEGORIES, gs.LABELS, gs.COLORS, "gas_storage",
-                          market="natural gas", sig=data["sig"], market_key=MARKET)
+                          market="natural gas", sig=data["sig"], market_key=MARKET, center="median")
     if not data["storage"].empty:
         st.markdown("**Recent reports**")
         # the latest reports too: their price moves fill in as the official prices arrive

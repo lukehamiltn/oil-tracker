@@ -67,11 +67,16 @@ class Significance:
     day. To judge an average after N events, we draw N random days thousands
     of times and see how often their average strays as far from normal as
     the events' average did. That share is the p-value: small = unlikely to
-    be luck. (For large N the bell-curve shortcut gives the same answer.)"""
+    be luck. (For large N the bell-curve shortcut gives the same answer.)
+
+    center="median" judges the TYPICAL (median) move instead of the average,
+    for markets with rare huge spikes (natural gas spot prices), where one
+    wild week can make an average look like a pattern."""
 
     SIMS = 4000
 
-    def __init__(self, markets: dict):
+    def __init__(self, markets: dict, center: str = "mean"):
+        self.center = center
         self.moves = {}
         for key, prices in markets.items():
             values = prices.to_numpy(dtype=float)
@@ -89,14 +94,16 @@ class Significance:
         moves = self.moves.get((market, horizon))
         if moves is None or n == 0:
             return float("nan")
-        normal = moves.mean()
-        gap = abs(values.mean() - normal)
-        if n > 100:                                   # bell-curve shortcut
+        middle = np.median if self.center == "median" else np.mean
+        normal = middle(moves)
+        gap = abs(middle(values) - normal)
+        if n > 100 and self.center == "mean":         # bell-curve shortcut
             z = gap / (moves.std() / math.sqrt(n))
             return math.erfc(z / math.sqrt(2))
         if (market, horizon, n) not in self._null:
-            picks = self._rng.integers(0, len(moves), size=(self.SIMS, n))
-            self._null[market, horizon, n] = np.abs(moves[picks].mean(axis=1) - normal)
+            sims = self.SIMS if n <= 300 else 1000    # (keeps big draws quick)
+            picks = self._rng.integers(0, len(moves), size=(sims, n))
+            self._null[market, horizon, n] = np.abs(middle(moves[picks], axis=1) - normal)
         return float((self._null[market, horizon, n] >= gap).mean())
 
     @staticmethod

@@ -33,7 +33,7 @@ def expectation(results: pd.DataFrame, column: str, category: str, date: pd.Time
     week = past[f"day_{HORIZON}_pct"].dropna()
     if week.empty:
         return {"n": 0}
-    return {"n": len(week), "avg": week.mean(), "up": (week > 0).mean(),
+    return {"n": len(week), "avg": week.median(), "up": (week > 0).mean(),     # (typical move)
             "verdict": sig.check(MARKET, HORIZON, week)}
 
 
@@ -128,7 +128,7 @@ def render(data: dict, closes: pd.Series) -> None:
             "Day": events["day"].map(lambda d: ui.day(d, year=False, weekday=True)),
             "Event": events["label"],
             "History said (Henry Hub, next week)": [
-                f"{e['avg']:+.1f}% avg after {e['n']} past · {mk.VERDICTS[e['verdict']][0].lower()}"
+                f"{e['avg']:+.1f}% typical after {e['n']} past · {mk.VERDICTS[e['verdict']][0].lower()}"
                 if e["n"] else "no past events" for _, e in events.iterrows()],
             "What happened": [
                 "—" if a is None else f"{a:+.1f}%" + ("" if d == HORIZON else f" (after {d} days)")
@@ -136,7 +136,7 @@ def render(data: dict, closes: pd.Series) -> None:
             "Right way?": ["—" if r is None or pd.isna(r) else ("Yes" if r else "No") for r in events["right_way"]],
         })
         st.dataframe(table, hide_index=True, width="stretch", key="gas_review_table")
-        ui.tip("'History said' is the average Henry Hub move in the week after past events of the same "
+        ui.tip("'History said' is the typical (median) Henry Hub move in the week after past events of the same "
                "type (the same size of storage surprise, or a spike in the same news topic), using only "
                "events before this one. 'What happened' is Henry Hub's move over the next 5 trading days "
                "from the close before the event. 'Right way?' compares just the direction, once the week "
@@ -195,4 +195,4 @@ def build_data() -> dict:
     return {"prices": prices, "storage": storage, "storage_react": es.compute_results(prices, storage),
             "timelines": timelines, "spikes": spikes,
             "spike_react": es.compute_results(prices, spikes) if not spikes.empty else (pd.DataFrame(), {}),
-            "sig": mk.Significance({MARKET: prices})}
+            "sig": mk.Significance({MARKET: prices}, center="median")}

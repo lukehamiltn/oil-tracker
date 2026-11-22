@@ -172,12 +172,13 @@ def like_this_before(prices: pd.Series, sig: mk.Significance, heads: pd.DataFram
     m4.metric(f"{NAME} a month later: typical", f"{month.median():+.1f}%",
               f"{verdict(20, month)} · rose {(month > 0).mean():.0%}", delta_color="off", delta_arrow="off",
               border=True)
-    ui.event_paths(results, paths, "#0f766e", news_page.MATCH_TABLE, key="gas_like_paths", market=NAME)
+    ui.event_paths(results, paths, "#0f766e", news_page.MATCH_TABLE, key="gas_like_paths", market=NAME,
+                   center="median")
     ui.tip("Similarity is based on shared wording (rare words like place and company names count most), "
            "so check the headlines to judge how alike the stories really are. With a handful of matches, "
            "one big move can swing the average, and gas moves a lot. That's why the numbers above are the "
-           "typical (median) move: half the stories were followed by more, half by less. The thick line in "
-           "the chart is still the average.", "How matches are found")
+           "typical (median) move: half the stories were followed by more, half by less.",
+           "How matches are found")
 
 
 # Topics ---------------------------------------------------------------------------
@@ -212,13 +213,14 @@ def topics_view(prices: pd.Series, data: dict, archive: pd.DataFrame) -> None:
     ui.tip(f"`{news.GAS_TOPICS[topic]['query']}`", "Search used for worldwide news")
     news_page.coverage_chart(t, spikes, COLORS[topic], key="gas_news_cov", source="world")
     st.markdown(f"**{NAME} after each of the {len(spikes)} news spikes**")
-    ui.event_paths(spikes, paths, COLORS[topic], news_page.SPIKE_TABLE, key="gas_topic_paths", market=NAME)
+    ui.event_paths(spikes, paths, COLORS[topic], news_page.SPIKE_TABLE, key="gas_topic_paths", market=NAME,
+                   center="median")
     if not results.empty:
         st.divider()
         st.subheader("All topics compared", anchor=False)
         available = [k for k in TOPIC_KEYS if k in set(results["topic"])]
         ui.comparison_section(prices, results, paths, "topic", available, LABELS, COLORS, key="gas_news_cmp",
-                              market=NAME, sig=data["sig"], market_key=MARKET)
+                              market=NAME, sig=data["sig"], market_key=MARKET, center="median")
         ui.tip("Based on news spikes in worldwide news coverage (Media Cloud): days when a topic got at least "
                f"{news.SPIKE_RATIO:.0f}× its normal share of all news.", "Source")
 
@@ -291,7 +293,8 @@ def search_view(prices: pd.Series, sig: mk.Significance, archive: pd.DataFrame) 
         c2.metric(f"{NAME} a week later: typical", f"{week.median():+.1f}%",
                   mk.VERDICTS[sig.check(MARKET, 5, week)][0], delta_color="off", delta_arrow="off", border=True)
         c3.metric(f"{NAME} rose afterwards", f"{(week > 0).mean():.0%}", border=True)
-        ui.event_paths(results, paths, "#0f766e", news_page.SPIKE_TABLE, key="gas_search_paths", market=NAME)
+        ui.event_paths(results, paths, "#0f766e", news_page.SPIKE_TABLE, key="gas_search_paths", market=NAME,
+                       center="median")
     if not archive.empty:
         pool = gas_pool(archive)
         recent = pool[mn.search_mask(pool, query)].sort_values("time", ascending=False).head(8)

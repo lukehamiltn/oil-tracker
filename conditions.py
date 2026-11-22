@@ -113,7 +113,7 @@ def build_table(features: pd.DataFrame) -> pd.DataFrame:
     return t[t.index >= START]
 
 
-def indicator_summary(table: pd.DataFrame, indicators: dict = INDICATORS) -> pd.DataFrame:
+def indicator_summary(table: pd.DataFrame, indicators: dict = INDICATORS, center: str = "mean") -> pd.DataFrame:
     today = table.iloc[-1]
     history = table.dropna(subset=["next_month_pct"])
     rows = []
@@ -128,7 +128,7 @@ def indicator_summary(table: pd.DataFrame, indicators: dict = INDICATORS) -> pd.
             "percentile": (values < today[col]).mean() * 100,
             "bucket": today_bucket,
             "days": len(same),
-            "avg_next_month": same["next_month_pct"].mean(),
+            "avg_next_month": same["next_month_pct"].median() if center == "median" else same["next_month_pct"].mean(),
             "pct_up": (same["next_month_pct"] > 0).mean() * 100,
         })
     return pd.DataFrame(rows)
@@ -166,14 +166,16 @@ def show(table: pd.DataFrame, price: pd.Series, recent_days: int, spec: dict) ->
     since = table.index[0].year
     as_of = table.index[-1]
     history = table.dropna(subset=["next_month_pct"])
-    base_avg = history["next_month_pct"].mean()
+    typical = spec.get("middle") == "median"
+    base_avg = history["next_month_pct"].median() if typical else history["next_month_pct"].mean()
+    middle_word = "typical" if typical else "average"
     base_up = (history["next_month_pct"] > 0).mean() * 100
 
     st.subheader("Today against history", anchor=False)
     st.markdown(f"""
 Where does {spec['market']} stand **today** compared with every trading day since {since},
 and what did {name} do over the **following month** when conditions were similar?
-For reference, across all days {name}'s average move over the next month was
+For reference, across all days {name}'s {middle_word} move over the next month was
 **{base_avg:+.1f}%**, and it rose **{base_up:.0f}%** of the time.
 """)
 
@@ -184,14 +186,14 @@ For reference, across all days {name}'s average move over the next month was
         ui.tip(f"Official daily spot prices are published about a week late (latest "
                f"{ui.day(official, year=False)}). For the {recent_days} trading days since, "
                + spec["recent_tip"], "About today's prices")
-    summary = indicator_summary(table, indicators)
+    summary = indicator_summary(table, indicators, spec.get("middle", "mean"))
     cards = []
     for _, row in summary.iterrows():
         label, fmt, help_text = indicators[row["key"]]
         title = (f'<span class="note-wrap" tabindex="0">{label}'
                  f'<span class="note-tip">{help_text}</span></span>')
         note = (f'<span class="bucket">{row["bucket"]} · higher than {row["percentile"]:.0f}% '
-                f'of days</span><div class="kpi-after">Past days like this: {name} '
+                f'of days</span><div class="kpi-after">Past days like this: {name} {"typically " if typical else ""}'
                 f'<b>{row["avg_next_month"]:+.1f}%</b> the next month, rose '
                 f'{row["pct_up"]:.0f}% of the time</div>')
         cards.append((title, fmt % row["today"], note, None))

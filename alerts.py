@@ -180,7 +180,7 @@ def main_gas(dry_run: bool = False) -> None:
         week = results.loc[results["topic"] == r.topic, "day_5_pct"].dropna() if not results.empty else []
         if len(week):
             verdict = data["sig"].check("NATGAS", 5, week)
-            lines.append(f"After {len(week)} past spikes, Henry Hub averaged {week.mean():+.1f}% over the "
+            lines.append(f"After {len(week)} past spikes, Henry Hub typically moved {week.median():+.1f}% over the "
                          f"next week and rose {(week > 0).mean():.0%} of the time "
                          f"({mk.VERDICTS[verdict][0].lower()}).")
         lines.append("History, not a forecast.")
