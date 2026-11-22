@@ -25,7 +25,7 @@ SITES = [
         "color": "#0f766e",
         "blurb": "Cold snaps, LNG exports, European supply and the weekly storage report: the "
                  "news that moves U.S. natural gas, and how prices reacted before.",
-        "features": ["Live Henry Hub price", "Gas news topics & spikes", "Weekly storage reports",
-                     "Price history"],
+        "features": ["Live Henry Hub price", "Weather outlook", "Weekly storage reports", "News spikes & storylines",
+                     "Market conditions", "Spike alerts"],
     },
 ]

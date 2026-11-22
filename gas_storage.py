@@ -185,3 +185,18 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+def vs_five_year_history(storage: pd.Series) -> pd.Series:
+    """For every weekly report: % storage was above (+) or below (-) the
+    average for the same week over the previous 5 years. Dated by the day the
+    report came out (so nothing is known before it was published)."""
+    s = storage.to_frame("bcf")
+    s["year"] = s.index.isocalendar().year.values
+    s["week"] = s.index.isocalendar().week.clip(upper=52).values
+    by_week = s.groupby(["week", "year"])["bcf"].last().unstack("year")   # weeks x years
+    values = []
+    for day, row in s.iterrows():
+        past = by_week.loc[row["week"], [y for y in by_week.columns if row["year"] - 5 <= y < row["year"]]].dropna()
+        values.append((row["bcf"] / past.mean() - 1) * 100 if len(past) >= 3 else float("nan"))
+    return pd.Series(values, index=release_dates(storage.index), name="storage_vs_5yr_pct").dropna().round(2)

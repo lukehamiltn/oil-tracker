@@ -17,10 +17,13 @@ import os
 
 import streamlit as st
 
+import alerts
+import conditions
 import credentials
 import daily_move
 import event_study
 import fetch_prices
+import gas_review
 import gas_storage
 import glossary
 import live_prices
@@ -29,6 +32,7 @@ import mediacloud_news
 import news
 import news_feeds
 import news_page
+import recap
 import signals
 import sites
 import storylines
@@ -44,7 +48,7 @@ st.set_page_config(page_title="Market Tracker · commodity news and market histo
 # every page starts from current code. (oil.py does the same for its own.)
 SHARED = [credentials, event_study, fetch_prices, live_prices, markets, mediacloud_news, news, news_feeds,
           daily_move, signals, ui, storylines, storylines_page, glossary, news_page, gas_storage, sites,
-          weather]
+          weather, recap, conditions, gas_review, alerts]
 
 
 @st.cache_resource

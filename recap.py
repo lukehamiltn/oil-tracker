@@ -59,7 +59,7 @@ def topic_week(timelines: pd.DataFrame, monday: pd.Timestamp, friday: pd.Timesta
         if week.empty or not normal:
             continue
         ratio = (week["articles"].sum() / week["all_articles"].sum()) / normal
-        rows.append({"topic": topic, "label": news.TOPICS[topic]["label"],
+        rows.append({"topic": topic, "label": news.topic_info(topic).get("label", topic),
                      "ratio": ratio, "articles": int(week["articles"].sum())})
     return pd.DataFrame(rows).sort_values("ratio", ascending=False) if rows else pd.DataFrame()
 
@@ -80,7 +80,7 @@ def actual_move(prices: pd.Series, event_date: pd.Timestamp) -> tuple[float | No
 
 def _label(kind: str, category: str) -> str:
     if kind == "news":
-        return news.TOPICS[category]["label"] + " (news spike)"
+        return news.topic_info(category).get("label", category) + " (news spike)"
     if kind == "inventory":
         return "EIA report: " + inv.LABELS[category]
     if kind == "opec":

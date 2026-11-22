@@ -6,10 +6,14 @@ The natural gas site (the /gas page).
   News     why gas moved today, the 2-week weather outlook, gas news topics
            with what Henry Hub did after past spikes, what's coming up, and the
            latest gas headlines
+  Week in review  how gas moved each week, the storage report, what made the
+           news, and what history suggested vs what happened
   Storage  storage against the last 5 years, and the weekly EIA report: how
            prices reacted to each size of surprise since 2015
   Prices & seasons  the storage season, the futures curve (winter premium),
            how gas usually moves each month, and prices since 2010
+  Market conditions  today's readings (trend, volatility, storage, vs a year
+           ago) against history, and the past days most like today
   Storylines  big gas stories that come back in waves (Europe's crisis,
            Russian pipelines, LNG exports, winter storms, AI power demand)
 
@@ -24,9 +28,12 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+import alerts
+import conditions
 import daily_move as dm
 import event_study as es
 import fetch_prices
+import gas_review
 import gas_storage as gs
 import glossary
 import live_prices
@@ -101,6 +108,19 @@ def weather_outlook(hour: str) -> dict | None:
         return None
 
 
+@st.cache_data(ttl=30 * 60, show_spinner=False)
+def recent_closes(hour: str) -> pd.Series:
+    return live_prices.daily_closes(MARKET, span="6mo")
+
+
+@st.cache_data(ttl=30 * 60, show_spinner=False)
+def conditions_table(version: str) -> tuple[pd.DataFrame, pd.Series, int]:
+    """Market conditions for every day up to today: the official prices
+    carried up to today with futures (they are published about a week late)."""
+    extended, added = live_prices.extend(prices, MARKET)
+    return conditions.gas_table(extended, gs.vs_five_year_history(gs.load_storage())), extended, added
+
+
 @st.cache_data(ttl=6 * 60 * 60, show_spinner=False)
 def news_archive() -> pd.DataFrame:
     return mn.load_archive()
@@ -142,6 +162,9 @@ left.markdown(
 actions = right.container(key="top_actions")
 if actions.button("Terminology", key="gas_glossary", help="The words the gas market uses, in plain English."):
     glossary.show_gas()
+actions.link_button("Spike alerts", alerts.GAS_SUBSCRIBE_URL, width="stretch",
+                    help="Free push notifications (ntfy app or browser) when a natural gas news topic starts "
+                         "spiking, with what happened after past spikes, plus a Saturday week in review.")
 st.write("")
 
 q = live_quote()
@@ -172,7 +195,8 @@ st.caption(f"Live price: Henry Hub front-month futures, about 10 minutes delayed
            f"price (latest {ui.day(prices.index[-1], year=False)}).")
 st.write("")
 
-tab_news, tab_storage, tab_history, tab_stories = st.tabs(["News", "Storage", "Prices & seasons", "Storylines"])
+tab_news, tab_review, tab_storage, tab_history, tab_cond, tab_stories = st.tabs(
+    ["News", "Week in review", "Storage", "Prices & seasons", "Market conditions", "Storylines"])
 
 
 # News ---------------------------------------------------------------------------------
@@ -527,6 +551,19 @@ with tab_history:
     st.plotly_chart(fig, width="stretch", config=ui.CHART_CONFIG, key="gas_history")
     ui.tip("Dots mark days a gas news topic spiked to at least 3× its normal coverage (from 2015). Gas is far "
            "more volatile than oil: a 5% day is ordinary, especially in winter.", "How to read this")
+
+with tab_review:
+    try:
+        gas_review.render(data, recent_closes(pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%d %H")))
+    except Exception as error:
+        st.error(f"This section hit a problem: {error}")
+
+with tab_cond:
+    try:
+        table, extended, added = conditions_table(f"{prices.index[-1]}-{len(prices)}-{len(data['storage'])}")
+        conditions.show(table, extended, added, conditions.GAS)
+    except Exception as error:
+        st.error(f"This section hit a problem: {error}")
 
 with tab_stories:
     try:

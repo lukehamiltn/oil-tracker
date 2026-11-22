@@ -39,10 +39,13 @@ jobs:
         run: |
           if [ "${{ inputs.test }}" = "true" ]; then
             python alerts.py --test
+            python alerts.py --gas --test
           elif [ "${{ github.event.schedule }}" = "0 14 * * 6" ]; then
             python alerts.py --weekly
+            python alerts.py --gas --weekly || echo "Gas weekly summary failed"
           else
             python alerts.py
+            python alerts.py --gas || echo "Gas alerts failed"
           fi
       - name: Save which alerts were sent
         run: |

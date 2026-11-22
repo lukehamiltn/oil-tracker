@@ -11,6 +11,8 @@ Two views:
 
 This is description, not a trading rule: the bucket edges use the whole
 history, and neighbouring days overlap, so treat the numbers as context.
+
+The gas page uses the same views with its own indicators (GAS, gas_table).
 """
 
 import numpy as np
@@ -46,6 +48,56 @@ INDICATORS = {
 }
 BUCKETS = ["Very low", "Low", "Middle", "High", "Very high"]
 
+# What changes between markets: the price's name, the indicators, wording
+OIL = {
+    "key": "cond", "name": "Brent", "market": "the oil market", "indicators": INDICATORS, "short": SHORT,
+    "recent_tip": "the price readings use Brent futures, scaled to meet the spot price on the last official "
+                  "day. Inventories, hedge-fund positioning and the dollar come from their own weekly reports.",
+}
+
+GAS_INDICATORS = {
+    "trend_gap_pct": ("Henry Hub vs its 200-day average", "%+.1f%%",
+                      "Above = uptrend; far above can mean stretched."),
+    "momentum_3m_pct": ("Henry Hub change over 3 months", "%+.1f%%",
+                        "Recent direction and strength of the move."),
+    "volatility_1m_pct": ("Volatility (last month, yearly rate)", "%.0f%%",
+                          "How violently prices are swinging. Gas is usually much wilder than oil."),
+    "storage_vs_5yr_pct": ("Gas in storage vs the 5-year average", "%+.1f%%",
+                           "For the same week of the year. Below = tight supply, above = plenty."),
+    "yoy_pct": ("Henry Hub vs a year ago", "%+.1f%%",
+                "Compares with the same season last year, so the winter/summer swing cancels out."),
+}
+GAS = {
+    "key": "gas_cond", "name": "Henry Hub", "market": "the natural gas market", "indicators": GAS_INDICATORS,
+    "short": {"trend_gap_pct": "vs 200-day", "momentum_3m_pct": "3-month change", "volatility_1m_pct": "Volatility",
+              "storage_vs_5yr_pct": "Storage vs 5-yr", "yoy_pct": "vs a year ago"},
+    # Gas spot prices have rare huge spikes (a cold snap can triple them), so
+    # the typical (median) match is shown instead of the average
+    "middle": "median",
+    "recent_tip": "the price readings use Henry Hub futures, scaled to meet the spot price on the last official "
+                  "day. Storage comes from the weekly EIA report.",
+}
+
+
+def _price_columns(t: pd.DataFrame, price: pd.Series) -> None:
+    t["trend_gap_pct"] = (price / price.rolling(200).mean() - 1) * 100
+    t["momentum_3m_pct"] = (price / price.shift(63) - 1) * 100
+    t["volatility_1m_pct"] = price.pct_change(fill_method=None).rolling(20).std() * np.sqrt(252) * 100
+    t["next_month_pct"] = (price.shift(-HORIZON) / price - 1) * 100
+
+
+def gas_table(prices: pd.Series, storage_vs_5yr: pd.Series) -> pd.DataFrame:
+    """Gas indicators for every trading day, plus Henry Hub's change over the
+    NEXT month. `storage_vs_5yr` is dated by when each report came out, so a
+    day only knows the storage reports published by then."""
+    price = prices.dropna()
+    t = pd.DataFrame(index=price.index)
+    _price_columns(t, price)
+    t["yoy_pct"] = (price / price.shift(252) - 1) * 100
+    t["storage_vs_5yr_pct"] = storage_vs_5yr.reindex(t.index.union(storage_vs_5yr.index)).ffill().reindex(t.index)
+    t = t[list(GAS_INDICATORS) + ["next_month_pct"]]
+    return t.dropna(subset=list(GAS_INDICATORS))
+
 
 def build_table(features: pd.DataFrame) -> pd.DataFrame:
     """Indicators for every day, plus Brent's change over the NEXT month."""
@@ -61,11 +113,11 @@ def build_table(features: pd.DataFrame) -> pd.DataFrame:
     return t[t.index >= START]
 
 
-def indicator_summary(table: pd.DataFrame) -> pd.DataFrame:
+def indicator_summary(table: pd.DataFrame, indicators: dict = INDICATORS) -> pd.DataFrame:
     today = table.iloc[-1]
     history = table.dropna(subset=["next_month_pct"])
     rows = []
-    for col, (label, _, _) in INDICATORS.items():
+    for col, (label, _, _) in indicators.items():
         values = table[col].dropna()
         # Rank first so tied values can't make two bucket edges identical
         buckets = pd.qcut(values.rank(method="first"), 5, labels=BUCKETS)
@@ -82,9 +134,9 @@ def indicator_summary(table: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def find_analogs(table: pd.DataFrame) -> pd.DataFrame:
+def find_analogs(table: pd.DataFrame, indicators: dict = INDICATORS) -> pd.DataFrame:
     """The past days most similar to today across all indicators."""
-    cols = list(INDICATORS)
+    cols = list(indicators)
     data = table[cols].dropna()
     z = (data - data.mean()) / data.std()           # put indicators on one scale
     distance = np.sqrt(((z - z.iloc[-1]) ** 2).sum(axis=1))
@@ -103,9 +155,15 @@ def find_analogs(table: pd.DataFrame) -> pd.DataFrame:
 
 
 def render(features: pd.DataFrame, recent_days: int = 0) -> None:
-    """recent_days: how many of the latest days come from futures prices (the
-    official spot prices are published about a week late)."""
-    table = build_table(features)
+    """The oil page's view. recent_days: how many of the latest days come from
+    futures prices (the official spot prices are published about a week late)."""
+    show(build_table(features), features["price"], recent_days, OIL)
+
+
+def show(table: pd.DataFrame, price: pd.Series, recent_days: int, spec: dict) -> None:
+    """Both views for one market. `spec`: OIL or GAS."""
+    name, indicators, short, key = spec["name"], spec["indicators"], spec["short"], spec["key"]
+    since = table.index[0].year
     as_of = table.index[-1]
     history = table.dropna(subset=["next_month_pct"])
     base_avg = history["next_month_pct"].mean()
@@ -113,9 +171,9 @@ def render(features: pd.DataFrame, recent_days: int = 0) -> None:
 
     st.subheader("Today against history", anchor=False)
     st.markdown(f"""
-Where does the oil market stand **today** compared with every trading day since 2007,
-and what did Brent do over the **following month** when conditions were similar?
-For reference, across all days Brent's average move over the next month was
+Where does {spec['market']} stand **today** compared with every trading day since {since},
+and what did {name} do over the **following month** when conditions were similar?
+For reference, across all days {name}'s average move over the next month was
 **{base_avg:+.1f}%**, and it rose **{base_up:.0f}%** of the time.
 """)
 
@@ -124,42 +182,44 @@ For reference, across all days Brent's average move over the next month was
     if recent_days:
         official = table.index[-1 - recent_days]
         ui.tip(f"Official daily spot prices are published about a week late (latest "
-               f"{ui.day(official, year=False)}). For the {recent_days} trading days since, the price "
-               "readings use Brent futures, scaled to meet the spot price on the last "
-               "official day. Inventories, hedge-fund positioning and the dollar come from "
-               "their own weekly reports.", "About today's prices")
-    summary = indicator_summary(table)
+               f"{ui.day(official, year=False)}). For the {recent_days} trading days since, "
+               + spec["recent_tip"], "About today's prices")
+    summary = indicator_summary(table, indicators)
     cards = []
     for _, row in summary.iterrows():
-        label, fmt, help_text = INDICATORS[row["key"]]
+        label, fmt, help_text = indicators[row["key"]]
         title = (f'<span class="note-wrap" tabindex="0">{label}'
                  f'<span class="note-tip">{help_text}</span></span>')
         note = (f'<span class="bucket">{row["bucket"]} · higher than {row["percentile"]:.0f}% '
-                f'of days</span><div class="kpi-after">Past days like this: Brent '
+                f'of days</span><div class="kpi-after">Past days like this: {name} '
                 f'<b>{row["avg_next_month"]:+.1f}%</b> the next month, rose '
                 f'{row["pct_up"]:.0f}% of the time</div>')
         cards.append((title, fmt % row["today"], note, None))
     ui.kpi_row(cards, columns=3)
     ui.tip(f"Each card puts today's reading in one of five buckets (very low to very high) "
-           f"and shows what Brent did over the next month on past days in the same bucket. "
+           f"and shows what {name} did over the next month on past days in the same bucket. "
            f"Compare with all days: {base_avg:+.1f}%, rose {base_up:.0f}% of the time. Days "
            "next to each other overlap heavily, so these are weaker evidence than they look.")
 
     # --- 2. Closest past situations -------------------------------------------
     st.write(""); st.markdown("**Past situations most like today**")
-    analogs = find_analogs(table)
+    analogs = find_analogs(table, indicators)
     a_avg = analogs["next_month_pct"].mean()
     a_up = (analogs["next_month_pct"] > 0).mean() * 100
     c1, c2, c3 = st.columns(3)
     c1.metric("Closest matches used", f"{len(analogs)}",
               f"at least {MIN_GAP} trading days apart", delta_color="off", delta_arrow="off", border=True)
-    c2.metric("Brent over their next month: average", f"{a_avg:+.1f}%",
-              f"median {analogs['next_month_pct'].median():+.1f}%", delta_color="off", delta_arrow="off", border=True)
-    c3.metric("Brent rose afterwards", f"{a_up:.0f}% of the time",
+    a_median = analogs["next_month_pct"].median()
+    if spec.get("middle") == "median":
+        c2.metric(f"{name} over their next month: typical", f"{a_median:+.1f}%",
+                  f"median; average {a_avg:+.1f}%", delta_color="off", delta_arrow="off", border=True)
+    else:
+        c2.metric(f"{name} over their next month: average", f"{a_avg:+.1f}%",
+                  f"median {a_median:+.1f}%", delta_color="off", delta_arrow="off", border=True)
+    c3.metric(f"{name} rose afterwards", f"{a_up:.0f}% of the time",
               f"all days: {base_up:.0f}%", delta_color="off", delta_arrow="off", border=True)
 
     # Price path after each analog
-    price = features["price"]
     paths = []
     for day in analogs.index:
         pos = price.index.get_loc(day)
@@ -172,28 +232,30 @@ For reference, across all days Brent's average move over the next month was
     fig.add_trace(go.Scatter(x=x + x[::-1], y=list(high) + list(low[::-1]), fill="toself",
                              fillcolor="rgba(42,120,214,0.15)", line=dict(width=0),
                              name="Middle half of matches", hoverinfo="skip"))
-    fig.add_trace(go.Scatter(x=x, y=paths.mean(axis=0), mode="lines", name="Average of matches",
+    typical = spec.get("middle") == "median"
+    fig.add_trace(go.Scatter(x=x, y=np.median(paths, axis=0) if typical else paths.mean(axis=0), mode="lines",
+                             name="Typical match (median)" if typical else "Average of matches",
                              line=dict(color="#1f4e8c", width=3),
                              hovertemplate="Day %{x}: %{y:+.1f}%<extra></extra>"))
     fig.add_hline(y=0, line_color="#c3c2b7", line_width=1)
     ui.base_layout(fig, 360, hovermode="x unified", yaxis_ticksuffix="%",
                    xaxis_title="Trading days after the matching day",
-                   yaxis_title="% change in Brent")
-    st.plotly_chart(fig, width="stretch", config=ui.CHART_CONFIG, key="cond_analogs")
-    ui.tip("The line is the average path after the past days most like today; the shaded "
+                   yaxis_title=f"% change in {name}")
+    st.plotly_chart(fig, width="stretch", config=ui.CHART_CONFIG, key=f"{key}_analogs")
+    ui.tip(f"The line is the {'typical (median)' if typical else 'average'} path after the past days most like today; the shaded "
            "band holds the middle half of them. Each one is listed in the table below.")
 
-    show = analogs.reset_index(names="date").sort_values("similarity", ascending=False)
+    rows = analogs.reset_index(names="date").sort_values("similarity", ascending=False)
     config = {
         "date": st.column_config.DateColumn("Date", format="MMM D, YYYY"),
         "similarity": st.column_config.ProgressColumn("Similarity", format="%.2f",
                                                       min_value=0, max_value=1),
-        "next_month_pct": st.column_config.NumberColumn("Brent next month", format="%+.1f%%"),
+        "next_month_pct": st.column_config.NumberColumn(f"{name} next month", format="%+.1f%%"),
     }
-    for col, (label, fmt, _) in INDICATORS.items():
-        config[col] = st.column_config.NumberColumn(SHORT[col], format=fmt, help=label)
-    st.dataframe(show[["date", "similarity", "next_month_pct", *INDICATORS]],
-                 width="stretch", hide_index=True, key="cond_analog_table",
+    for col, (label, fmt, _) in indicators.items():
+        config[col] = st.column_config.NumberColumn(short[col], format=fmt, help=label)
+    st.dataframe(rows[["date", "similarity", "next_month_pct", *indicators]],
+                 width="stretch", hide_index=True, key=f"{key}_analog_table",
                  column_config=config)
-    ui.tip("Similarity compares all six indicators at once, each scaled to its "
-               "normal range.")
+    ui.tip(f"Similarity compares all {len(indicators)} indicators at once, each scaled to its "
+           "normal range.")
