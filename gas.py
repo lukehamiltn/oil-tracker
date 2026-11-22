@@ -3,12 +3,15 @@ The natural gas site (the /gas page).
 
   header   live Henry Hub price, the next storage report, the latest report's
            surprise, and the gas story getting the most extra coverage
-  News     why gas moved today, gas news topics with what Henry Hub did after
-           past spikes, what's coming up, and the latest gas headlines
+  News     why gas moved today, the 2-week weather outlook, gas news topics
+           with what Henry Hub did after past spikes, what's coming up, and the
+           latest gas headlines
   Storage  storage against the last 5 years, and the weekly EIA report: how
            prices reacted to each size of surprise since 2015
   Prices & seasons  the storage season, the futures curve (winter premium),
            how gas usually moves each month, and prices since 2010
+  Storylines  big gas stories that come back in waves (Europe's crisis,
+           Russian pipelines, LNG exports, winter storms, AI power demand)
 
 The machinery is shared with the oil site: news.py (topics and spikes),
 event_study.py (price reactions), markets.py (is a pattern real?), ui.py.
@@ -27,13 +30,16 @@ import fetch_prices
 import gas_storage as gs
 import glossary
 import live_prices
+import market_news as mn
 import markets as mk
 import mediacloud_news
 import news
 import news_feeds as nf
 import news_page
 import signals as sg
+import storylines_page
 import ui
+import weather
 
 ui.apply_styles()
 
@@ -84,6 +90,20 @@ def live_quote():
 @st.cache_data(ttl=30 * 60, show_spinner=False)
 def gas_curve(hour: str) -> pd.DataFrame:
     return sg.curve(MARKET, months=24)      # shared by all visitors, refreshed every 30 min
+
+
+@st.cache_data(ttl=60 * 60, show_spinner=False)
+def weather_outlook(hour: str) -> dict | None:
+    try:
+        return weather.outlook()
+    except Exception as error:
+        print(f"Weather unavailable: {error!r}")
+        return None
+
+
+@st.cache_data(ttl=6 * 60 * 60, show_spinner=False)
+def news_archive() -> pd.DataFrame:
+    return mn.load_archive()
 
 
 @st.cache_data(ttl=15 * 60, show_spinner=False)
@@ -152,7 +172,7 @@ st.caption(f"Live price: Henry Hub front-month futures, about 10 minutes delayed
            f"price (latest {ui.day(prices.index[-1], year=False)}).")
 st.write("")
 
-tab_news, tab_storage, tab_history = st.tabs(["News", "Storage", "Prices & seasons"])
+tab_news, tab_storage, tab_history, tab_stories = st.tabs(["News", "Storage", "Prices & seasons", "Storylines"])
 
 
 # News ---------------------------------------------------------------------------------
@@ -202,6 +222,45 @@ def why_today() -> None:
                    "(\"Natural gas jumps as...\"), which usually give the reason, then the newest stories on the "
                    "busiest gas topics. They are the likeliest explanations, not proof of cause.",
                    "How these are picked")
+
+
+def weather_section() -> None:
+    view = weather_outlook(pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%d %H"))
+    st.subheader("The weather outlook", anchor=False)
+    if view is None:
+        st.info("The weather forecast isn't available right now. Try again later.")
+        return
+    title, detail, effect = weather.reading(view)
+    measure = view["measure"]
+    word = "heating" if measure == "hdd" else "cooling"
+    both = (view["week1"] + view["week2"]) / 2
+    bullish = both > 5
+    color = "#1d8a5e" if bullish else "#c43a39" if both < -5 else None
+    ui.kpi_row([
+        ("Next 2 weeks", title.split(":")[0], effect, color),
+        ("Days 1-7", f"{view['week1']:+.0f}%", f"{word} demand vs normal", None),
+        ("Days 8-14", f"{view['week2']:+.0f}%", f"{word} demand vs normal (less certain)", None),
+    ], columns=3)
+    days = view["days"]
+    past, ahead = days[~days["forecast"]], days[days["forecast"]]
+    fig = go.Figure()
+    fig.add_trace(go.Bar(x=past.index, y=past[measure], name="Past week", marker_color="#c9c7bd",
+                         hovertemplate="%{x|%a %b %-d}: %{y:.1f}<extra>past week</extra>"))
+    fig.add_trace(go.Bar(x=ahead.index, y=ahead[measure], name="Forecast",
+                         marker_color="#3b82f6" if measure == "hdd" else "#f97316",
+                         hovertemplate="%{x|%a %b %-d}: %{y:.1f}<extra>forecast</extra>"))
+    fig.add_trace(go.Scatter(x=days.index, y=days[f"{measure}_normal"], name="Normal (2015-2024)", mode="lines",
+                             line=dict(color="#1d1d1b", width=2, dash="dot"),
+                             hovertemplate="%{x|%a %b %-d}: normal %{y:.1f}<extra></extra>"))
+    ui.base_layout(fig, 300, hovermode="x unified", barmode="overlay",
+                   yaxis_title=f"{'Heating' if measure == 'hdd' else 'Cooling'} degree days")
+    st.plotly_chart(fig, width="stretch", config=ui.CHART_CONFIG, key="gas_weather")
+    st.caption(detail)
+    ui.tip(f"Degree days measure {word} demand: how far each day's average temperature is "
+           f"{'below' if measure == 'hdd' else 'above'} 65°F, averaged over 14 big U.S. cities weighted by "
+           "population (New York counts for more than Denver). More heating degree days in winter means more gas "
+           "burned for heat; in summer, cooling degree days mean air-conditioning and more gas burned at power "
+           "plants. Forecast from Open-Meteo; normal is the 2015-2024 average for each date.", "How to read this")
 
 
 def headline_rows(heads: pd.DataFrame) -> None:
@@ -287,6 +346,8 @@ def headlines() -> None:
 with tab_news:
     try:
         why_today()
+        st.write("")
+        weather_section()
         st.write("")
         topic_cards()
         st.write("")
@@ -467,6 +528,12 @@ with tab_history:
     ui.tip("Dots mark days a gas news topic spiked to at least 3× its normal coverage (from 2015). Gas is far "
            "more volatile than oil: a 5% day is ordinary, especially in winter.", "How to read this")
 
+with tab_stories:
+    try:
+        storylines_page.render_for("gas", prices, news_archive())
+    except Exception as error:
+        st.error(f"This section hit a problem: {error}")
+
 st.markdown("<div class='footer'><b>Market Tracker</b> is an independent research project. Nothing here is "
             "investment advice, and past reactions are no guarantee of future ones. Data: U.S. EIA, FRED, Media "
-            "Cloud, publishers' news feeds, Yahoo Finance (live futures).</div>", unsafe_allow_html=True)
+            "Cloud, publishers' news feeds, Yahoo Finance (live futures), Open-Meteo (weather, CC BY 4.0).</div>", unsafe_allow_html=True)

@@ -55,6 +55,54 @@ STORYLINES = {
     },
 }
 
+# The natural gas page's storylines (same fields; saved to their own file)
+GAS_PATH = Path(__file__).parent / "news_data" / "mc_gas_storylines.csv"
+GAS_STORYLINES = {
+    "europe_crisis": {
+        "label": "Europe's gas crisis",
+        "summary": "Shortages and record prices in Europe, which pull U.S. gas abroad as LNG and lift "
+                   "Henry Hub with them.",
+        "query": '("natural gas" OR "gas prices" OR "gas supply") (Europe OR European) (crisis OR shortage OR '
+                 '"price cap" OR rationing OR "record high")',
+        "keywords": r"europe|european|\bttf\b|eu gas",
+        "color": "#e87ba4",
+    },
+    "russia_gas": {
+        "label": "Russian pipeline gas",
+        "summary": "Gazprom, Nord Stream and Russia's gas exports to Europe: cut off in 2022 and blown up "
+                   "under the Baltic Sea that September.",
+        "query": '("Nord Stream" OR Gazprom OR "Russian gas")',
+        "keywords": r"nord stream|gazprom|russian gas|russia",
+        "color": "#6250d6",
+    },
+    "us_lng": {
+        "label": "The U.S. LNG export boom",
+        "summary": "America's fast-growing LNG exports, which tie U.S. gas to world prices. Plant outages "
+                   "(like the Freeport explosion in 2022) leave more gas at home.",
+        "query": '("LNG export" OR "LNG exports" OR "LNG terminal" OR "LNG plant") ("United States" OR U.S. OR '
+                 'American OR Freeport OR "Sabine Pass" OR "Golden Pass" OR "Plaquemines")',
+        "keywords": r"\blng\b|freeport|sabine pass|golden pass|plaquemines",
+        "color": "#2a78d6",
+    },
+    "winter_storms": {
+        "label": "Winter storms and freezes",
+        "summary": "Arctic blasts that send heating demand soaring and freeze wells, like Winter Storm Uri "
+                   "(February 2021) and Elliott (December 2022).",
+        "query": '("winter storm" OR "polar vortex" OR "arctic blast" OR "deep freeze") ("natural gas" OR '
+                 '"power outage" OR blackout OR "power grid")',
+        "keywords": r"winter storm|polar vortex|arctic blast|freeze|frigid|blackout",
+        "color": "#0ea5e9",
+    },
+    "ai_power": {
+        "label": "AI data centres and power demand",
+        "summary": "The race to power AI data centres, much of it with gas-fired power plants: a new "
+                   "source of long-term gas demand.",
+        "query": '("data center" OR "data centers" OR "data centre") ("natural gas" OR "gas-fired" OR "gas turbine")',
+        "keywords": r"data cent|\bai\b|artificial intelligence|gas-fired",
+        "color": "#f59e0b",
+    },
+}
+
 WAVE_RATIO = 2.5     # a wave: 7-day coverage at least 2.5x its normal (past year's median)...
 WAVE_MIN_DAYS = 5    # ...for at least 5 days,
 WAVE_GAP = 21        # with quieter spells shorter than 3 weeks counted as the same wave
@@ -70,7 +118,7 @@ def load(path: Path = PATH) -> pd.DataFrame:
     return pd.read_csv(path, parse_dates=["date"])
 
 
-def update(path: Path = PATH) -> bool:
+def update(path: Path = PATH, stories: dict | None = None) -> bool:
     """Full history for new storylines; the last few weeks for the others."""
     import mediacloud.api as mc
     key = mcn.api_key()
@@ -82,7 +130,7 @@ def update(path: Path = PATH) -> bool:
     today = dt.datetime.now(dt.timezone.utc).date()
     last = table.groupby("storyline")["date"].max()
     all_ok = True
-    for i, (key_, story) in enumerate(STORYLINES.items()):
+    for i, (key_, story) in enumerate((stories or STORYLINES).items()):
         start = (mcn.HISTORY_START if key_ not in last
                  else last[key_].date() - dt.timedelta(days=mcn.REFETCH_DAYS))
         if i:
@@ -183,13 +231,14 @@ def turning_points(cov: pd.DataFrame, wave, n: int = 5, apart: int = 10) -> list
     return sorted(picked)
 
 
-def top_headline(archive: pd.DataFrame, key: str, day: pd.Timestamp) -> pd.Series | None:
+def top_headline(archive: pd.DataFrame, key: str, day: pd.Timestamp,
+                 stories: dict | None = None) -> pd.Series | None:
     """The saved headline that best stands for a storyline on a day (that
     day or the next, since a story often breaks late)."""
     if archive.empty:
         return None
     window = archive[(archive["day"] >= day) & (archive["day"] <= day + pd.Timedelta(days=1))]
-    hits = window[window["headline"].str.contains(STORYLINES[key]["keywords"], case=False,
+    hits = window[window["headline"].str.contains((stories or STORYLINES)[key]["keywords"], case=False,
                                                   regex=True)]
     if hits.empty:
         return None
@@ -229,5 +278,8 @@ def wave_moves(brent: pd.Series, wave) -> dict:
 
 
 if __name__ == "__main__":
-    if (sys.argv[1] if len(sys.argv) > 1 else "update") == "update":
+    command = sys.argv[1] if len(sys.argv) > 1 else "update"
+    if command == "update":
         sys.exit(0 if update() else 1)
+    if command == "update-gas":
+        sys.exit(0 if update(GAS_PATH, GAS_STORYLINES) else 1)

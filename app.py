@@ -31,7 +31,10 @@ import news_feeds
 import news_page
 import signals
 import sites
+import storylines
+import storylines_page
 import ui
+import weather
 
 st.set_page_config(page_title="Market Tracker · commodity news and market history",
                    page_icon=":material/monitoring:", layout="wide")
@@ -40,7 +43,8 @@ st.set_page_config(page_title="Market Tracker · commodity news and market histo
 # old ui.py = crash). Reload the shared ones whenever any changed on disk, so
 # every page starts from current code. (oil.py does the same for its own.)
 SHARED = [credentials, event_study, fetch_prices, live_prices, markets, mediacloud_news, news, news_feeds,
-          daily_move, signals, ui, glossary, news_page, gas_storage, sites]
+          daily_move, signals, ui, storylines, storylines_page, glossary, news_page, gas_storage, sites,
+          weather]
 
 
 @st.cache_resource
