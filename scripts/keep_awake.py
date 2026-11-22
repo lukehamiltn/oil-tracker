@@ -13,7 +13,7 @@ import time
 
 from playwright.sync_api import sync_playwright
 
-URL = "https://oil-tracker-q7rqjuftmvvqnrgbkzwjcd.streamlit.app/"
+URL = "https://oil-tracker-q7rqjuftmvvqnrgbkzwjcd.streamlit.app/oil"  # the oil page warms the shared data
 WAIT_SECONDS = 300
 
 

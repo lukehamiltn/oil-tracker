@@ -100,6 +100,54 @@ TOPICS = {
     },
 }
 
+# Natural gas topics (the gas page). Same fields as TOPICS; keys start with
+# "gas_" so they never clash with the oil topics.
+GAS_TOPICS = {
+    "gas_lng": {
+        "label": "LNG exports & terminals",
+        "query": '("LNG" OR "liquefied natural gas") (export OR exports OR terminal OR outage OR shipment OR cargo)',
+        "keywords": r"\blng\b|liquefied natural gas|freeport|sabine pass",
+        "color": "#2a78d6",
+    },
+    "gas_weather": {
+        "label": "Cold snaps & heat waves",
+        "query": '("natural gas" OR "gas prices" OR "power demand") ("cold snap" OR "winter storm" OR '
+                 '"polar vortex" OR "arctic blast" OR "heat wave" OR heatwave OR "deep freeze")',
+        "keywords": r"cold snap|winter storm|polar vortex|arctic blast|heat ?wave|freeze|frigid|blizzard",
+        "color": "#6250d6",
+    },
+    "gas_europe": {
+        "label": "Europe & Russia gas supply",
+        "query": '("natural gas" OR "gas supply" OR "gas supplies") (Russia OR Gazprom OR "Nord Stream" OR '
+                 'Europe OR TTF OR Ukraine)',
+        "keywords": r"gazprom|nord stream|\bttf\b|europe.{0,30}gas|russia.{0,30}gas|gas.{0,30}(europe|russia)",
+        "color": "#e87ba4",
+    },
+    "gas_pipeline": {
+        "label": "Pipeline & plant outages",
+        "query": '("natural gas" OR "gas pipeline" OR "gas plant" OR "gas field") (explosion OR outage OR '
+                 'shutdown OR leak OR "force majeure" OR fire)',
+        "keywords": r"pipeline|outage|explosion|force majeure|shut ?down|leak",
+        "color": "#eb6834",
+    },
+    "gas_hurricane": {
+        "label": "Hurricanes in the Gulf",
+        "query": 'hurricane ("Gulf of Mexico" OR "Gulf Coast" OR LNG OR offshore) ("natural gas" OR gas)',
+        "keywords": r"hurricane|tropical storm|gulf of mexico|gulf coast",
+        "color": "#008300",
+        "months": [6, 7, 8, 9, 10, 11],
+    },
+}
+
+
+def topic_info(key: str) -> dict:
+    """A topic's settings, oil or gas."""
+    return TOPICS.get(key) or GAS_TOPICS.get(key) or {}
+
+
+def classify_gas(title: str) -> list[str]:
+    title = title.lower()
+    return [key for key, t in GAS_TOPICS.items() if re.search(t["keywords"], title)]
 
 
 # ---------------------------------------------------------------------------
@@ -318,7 +366,7 @@ def find_spikes(t: pd.DataFrame, category: str = "topic", source: str = "world",
     hot = c[(c["ratio"] >= SPIKE_RATIO) & (c["articles"] >= min_articles)
             & ~(c["articles"] < busy_day)]
     topic = t["topic"].iloc[0] if "topic" in t and len(t) else None
-    months = TOPICS.get(topic, {}).get("months")
+    months = topic_info(topic).get("months")
     if months:   # seasonal topics (hurricanes) only count in season
         hot = hot[hot["date"].dt.month.isin(months)]
     rows, last = [], None
@@ -364,7 +412,7 @@ def current_heat(timelines: pd.DataFrame, source: str = "world") -> pd.DataFrame
             continue
         articles = int(recent["articles"].sum())
         peak = recent.loc[recent["articles"].idxmax()]
-        rows.append({"topic": key, "label": TOPICS[key]["label"], "heat": ratio,
+        rows.append({"topic": key, "label": topic_info(key).get("label", key), "heat": ratio,
                      "articles_3d": articles,
                      # too few articles for the ratio to mean anything (one
                      # story on a quiet day can look like "6x normal")

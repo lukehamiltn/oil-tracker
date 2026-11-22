@@ -158,11 +158,29 @@ h3 { letter-spacing: -0.005em; }
 .note-wrap:hover .note-tip, .note-wrap:focus .note-tip { visibility: visible; opacity: 1; }
 /* No floating toolbar (eye / download / search / full screen) over tables */
 [data-testid="stElementToolbar"] { display: none !important; }
+/* Homepage market cards */
+[class*="st-key-market_"] { background: #ffffff; transition: box-shadow 0.15s, transform 0.15s; }
+[class*="st-key-market_"]:hover { box-shadow: 0 6px 20px rgba(31, 58, 95, 0.12); transform: translateY(-2px); }
+.market-name { font-family: "Source Serif 4", Georgia, serif; font-size: 1.7rem; font-weight: 700; margin-bottom: 0.3rem; }
+.market-price { font-size: 1.9rem; font-weight: 700; letter-spacing: -0.02em; color: #1d1d1b; }
+.market-unit { font-size: 0.85rem; font-weight: 500; color: #898781; }
+.market-blurb { font-size: 0.92rem; color: #3d3c39; line-height: 1.45; margin: 0.3rem 0 0.6rem; }
+.market-chip { display: inline-block; font-size: 0.74rem; color: #52514e; background: #f1f0ea;
+    border-radius: 999px; padding: 0.15rem 0.6rem; margin: 0 0.3rem 0.35rem 0; }
 .footer { color: #898781; font-size: 0.8rem; margin-top: 3rem; padding-top: 1rem;
           border-top: 1px solid #1d1d1b; display: grid; gap: 0.35rem; }
 .footer b { color: #52514e; }
 </style>
 """
+
+
+def back_link() -> None:
+    """The "All markets" link at the top of each market page. (A plain link
+    when the page runs on its own, outside the website's page router.)"""
+    try:
+        st.page_link("home.py", label="← All markets")
+    except Exception:
+        st.markdown("[← All markets](/)")
 
 
 def apply_styles() -> None:

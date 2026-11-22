@@ -30,6 +30,7 @@ import news
 import credentials
 
 PATH = Path(__file__).parent / "news_data" / "mc_timelines.csv"
+GAS_PATH = Path(__file__).parent / "news_data" / "mc_gas_timelines.csv"   # natural gas topics
 HISTORY_START = dt.date(2015, 1, 1)
 # "Global English Language Sources" (about 1,600 sites) + "United States - National"
 COLLECTIONS = [9272347, 34412234]
@@ -157,7 +158,7 @@ def load(path: Path = PATH) -> pd.DataFrame:
     return pd.read_csv(path, parse_dates=["date"])
 
 
-def update(path: Path = PATH) -> bool:
+def update(path: Path = PATH, topics: dict | None = None) -> bool:
     """Bring every topic up to date. New topics get their full history; others
     re-fetch the last few weeks. Progress is saved after each topic, and a
     topic that fails is simply retried on the next run. False if any failed."""
@@ -171,7 +172,7 @@ def update(path: Path = PATH) -> bool:
     today = dt.datetime.now(dt.timezone.utc).date()
     last = table.groupby("topic")["date"].max()
     all_ok, first = True, True
-    for key_, topic in news.TOPICS.items():
+    for key_, topic in (topics or news.TOPICS).items():
         if key_ in last and last[key_].date() >= today:
             continue                                 # already up to date today
         start = (HISTORY_START if key_ not in last
@@ -202,5 +203,7 @@ if __name__ == "__main__":
     command = sys.argv[1] if len(sys.argv) > 1 else "update"
     if command == "update":
         sys.exit(0 if update() else 1)
+    if command == "update-gas":          # the natural gas topics
+        sys.exit(0 if update(GAS_PATH, news.GAS_TOPICS) else 1)
     if command == "stories":
         sys.exit(0 if update_stories() else 1)
