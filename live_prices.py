@@ -55,14 +55,52 @@ def _remember(key, make):
     return value
 
 
+# Futures roots by market (NYMEX), for finding the actual contract behind the
+# "front month" price. Yahoo's front-month series (e.g. NG=F) jumps from one
+# contract to the next each month: on Nov 20, 2026 gas "rose 14.7%" only
+# because NG=F switched from the December to the January contract. So daily
+# changes and recent charts use the one contract it's tracking right now.
+CONTRACT_ROOTS = {"BRENT": "BZ", "WTI": "CL", "NATGAS": "NG", "GASOLINE": "RB", "HEATING_OIL": "HO"}
+_MONTH_CODES = "FGHJKMNQUVXZ"
+
+
+def _chart(symbol: str, span: str, timeout: float) -> dict:
+    response = requests.get(QUOTE_URL.format(symbol=symbol), params={"range": span, "interval": "1d"},
+                            headers={"User-Agent": "Mozilla/5.0"}, timeout=timeout)
+    response.raise_for_status()
+    return response.json()["chart"]["result"][0]
+
+
+def front_contract(market: str, timeout: float = 6) -> str:
+    """The Yahoo symbol of the contract the front-month price is tracking right
+    now (e.g. "NGF27.NYM"), or the front-month symbol itself if it can't be
+    matched. Remembered for 30 minutes."""
+    def find() -> str | None:
+        root = CONTRACT_ROOTS.get(market)
+        if not root:
+            return None
+        try:
+            price = float(_chart(SYMBOLS[market], "5d", timeout)["meta"]["regularMarketPrice"])
+            first = pd.Timestamp.now(tz=MARKET_TZ).tz_localize(None).normalize().replace(day=1)
+            for i in range(5):
+                month = first + pd.DateOffset(months=i)
+                symbol = f"{root}{_MONTH_CODES[month.month - 1]}{month.year % 100:02d}.NYM"
+                try:
+                    other = float(_chart(symbol, "5d", timeout)["meta"]["regularMarketPrice"])
+                except Exception:
+                    continue
+                if abs(other / price - 1) < 0.0025:
+                    return symbol
+        except Exception as error:
+            print(f"Couldn't match the front contract for {market}: {error!r}")
+        return None
+    return _remember(("front", market, int(_time.time() // 1800)), find) or SYMBOLS[market]
+
+
 def _yahoo_quote(market: str, timeout: float = 6) -> dict | None:
     """{'price', 'change_pct' (vs previous close), 'time' (New York)} or None."""
     try:
-        response = requests.get(QUOTE_URL.format(symbol=SYMBOLS[market]),
-                                params={"range": "5d", "interval": "1d"},
-                                headers={"User-Agent": "Mozilla/5.0"}, timeout=timeout)
-        response.raise_for_status()
-        result = response.json()["chart"]["result"][0]
+        result = _chart(front_contract(market, timeout), "5d", timeout)
         meta = result["meta"]
         price = float(meta["regularMarketPrice"])
         # Previous close = the last daily close before today's bar
@@ -77,15 +115,12 @@ def _yahoo_quote(market: str, timeout: float = 6) -> dict | None:
 
 
 def _yahoo_closes(market: str, timeout: float = 8, span: str = "3mo") -> pd.Series:
-    """Daily closes (front-month futures for the oil markets) for the last
-    `span` (e.g. "3mo", "1y"), by New York date. Today's value is the latest
-    price so far. Empty if Yahoo doesn't answer."""
+    """Daily closes for the last `span` (e.g. "3mo", "1y"), by New York date,
+    of the futures contract the front-month price is tracking now (so the
+    monthly switch to the next contract doesn't show up as a fake jump).
+    Today's value is the latest price so far. Empty if Yahoo doesn't answer."""
     try:
-        response = requests.get(QUOTE_URL.format(symbol=SYMBOLS[market]),
-                                params={"range": span, "interval": "1d"},
-                                headers={"User-Agent": "Mozilla/5.0"}, timeout=timeout)
-        response.raise_for_status()
-        result = response.json()["chart"]["result"][0]
+        result = _chart(front_contract(market, timeout), span, timeout)
         days = (pd.to_datetime(result["timestamp"], unit="s", utc=True)
                 .tz_convert(MARKET_TZ).tz_localize(None).normalize())
         closes = pd.Series(result["indicators"]["quote"][0]["close"], index=days, dtype=float)

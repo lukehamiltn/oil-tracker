@@ -18,15 +18,18 @@ import os
 import streamlit as st
 
 import credentials
+import daily_move
 import event_study
 import fetch_prices
 import gas_storage
+import glossary
 import live_prices
 import markets
 import mediacloud_news
 import news
 import news_feeds
 import news_page
+import signals
 import sites
 import ui
 
@@ -37,7 +40,7 @@ st.set_page_config(page_title="Market Tracker · commodity news and market histo
 # old ui.py = crash). Reload the shared ones whenever any changed on disk, so
 # every page starts from current code. (oil.py does the same for its own.)
 SHARED = [credentials, event_study, fetch_prices, live_prices, markets, mediacloud_news, news, news_feeds,
-          ui, news_page, gas_storage, sites]
+          daily_move, signals, ui, glossary, news_page, gas_storage, sites]
 
 
 @st.cache_resource

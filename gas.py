@@ -3,11 +3,12 @@ The natural gas site (the /gas page).
 
   header   live Henry Hub price, the next storage report, the latest report's
            surprise, and the gas story getting the most extra coverage
-  News     gas news topics with what Henry Hub did after past spikes, what's
-           coming up, and the latest gas headlines
-  Storage  the weekly EIA storage report: how prices reacted to each size of
-           surprise since 2015
-  History  Henry Hub prices since 2010, with past gas news spikes marked
+  News     why gas moved today, gas news topics with what Henry Hub did after
+           past spikes, what's coming up, and the latest gas headlines
+  Storage  storage against the last 5 years, and the weekly EIA report: how
+           prices reacted to each size of surprise since 2015
+  Prices & seasons  the storage season, the futures curve (winter premium),
+           how gas usually moves each month, and prices since 2010
 
 The machinery is shared with the oil site: news.py (topics and spikes),
 event_study.py (price reactions), markets.py (is a pattern real?), ui.py.
@@ -20,15 +21,18 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+import daily_move as dm
 import event_study as es
 import fetch_prices
 import gas_storage as gs
+import glossary
 import live_prices
 import markets as mk
 import mediacloud_news
 import news
 import news_feeds as nf
 import news_page
+import signals as sg
 import ui
 
 ui.apply_styles()
@@ -77,6 +81,11 @@ def live_quote():
     return live_prices.quote(MARKET)
 
 
+@st.cache_data(ttl=30 * 60, show_spinner=False)
+def gas_curve(hour: str) -> pd.DataFrame:
+    return sg.curve(MARKET, months=24)      # shared by all visitors, refreshed every 30 min
+
+
 @st.cache_data(ttl=15 * 60, show_spinner=False)
 def gas_headlines() -> pd.DataFrame:
     """Recent articles about natural gas from the publishers' feeds."""
@@ -104,11 +113,15 @@ heat = news.current_heat(data["timelines"]) if not data["timelines"].empty else 
 # Header -------------------------------------------------------------------------
 ui.back_link()
 now = pd.Timestamp.now(tz="America/New_York")
-st.markdown(
+left, right = st.columns([2, 1], vertical_alignment="top")
+left.markdown(
     f'<div class="dateline">{now:%A}, {now:%B} {now.day}, {now:%Y}</div>'
     f'<div class="masthead">{ui.LOGO}<div><div class="wordmark">Natural Gas Tracker</div>'
     '<div class="dek">The news that moves U.S. natural gas, set against similar moments in the past '
     'and what prices did next.</div></div></div>', unsafe_allow_html=True)
+actions = right.container(key="top_actions")
+if actions.button("Terminology", key="gas_glossary", help="The words the gas market uses, in plain English."):
+    glossary.show_gas()
 st.write("")
 
 q = live_quote()
@@ -139,10 +152,71 @@ st.caption(f"Live price: Henry Hub front-month futures, about 10 minutes delayed
            f"price (latest {ui.day(prices.index[-1], year=False)}).")
 st.write("")
 
-tab_news, tab_storage, tab_history = st.tabs(["News", "Storage reports", "Price history"])
+tab_news, tab_storage, tab_history = st.tabs(["News", "Storage", "Prices & seasons"])
 
 
 # News ---------------------------------------------------------------------------------
+def why_today() -> None:
+    """Today's Henry Hub move, how unusual it is, the headlines most likely
+    behind it, and what gas did the week after past days like it."""
+    if not q or q.get("change_pct") is None:
+        return
+    change, t = q["change_pct"], q["time"]
+    is_today = pd.Timestamp.now(tz=t.tz).date() == t.date()
+    stats = dm.move_stats(prices, change)
+    up = change >= 0
+    color = "#1d8a5e" if up else "#c43a39"
+    clock = f"{t.hour % 12 or 12}:{t:%M} {'pm' if t.hour >= 12 else 'am'} ET"
+    quiet = abs(change) < 1
+    years = f"trading days in the past {dm.HISTORY_YEARS} years"
+    rank = (f"A quiet day: a smaller move than {100 - stats['bigger_than']:.0f}% of {years}"
+            if quiet else f"A bigger move than {stats['bigger_than']:.0f}% of {years}")
+    st.subheader("Why gas moved today" if is_today else "Gas's last session", anchor=False)
+    with st.container(border=True, key="why_today"):
+        a, b = st.columns([2, 3], gap="large")
+        with a:
+            ui.eyebrow(f"Henry Hub gas · {ui.day(t, year=False, weekday=True)}, {clock}")
+            st.markdown(f"<div class='why-move' style='color:{color}'>{'▲' if up else '▼'} {change:+.1f}%</div>"
+                        f"<div class='why-price'>${q['price']:.2f} per MMBtu</div><div class='why-rank'>{rank}</div>",
+                        unsafe_allow_html=True)
+            diff = stats["avg_ahead"] - stats["base_avg"]
+            verdict = ("about the same as any week, so a day like this says little about the next one"
+                       if abs(diff) < 1 else f"{'better' if diff > 0 else 'worse'} than a typical week")
+            st.markdown("<div class='card-rule' style='margin:0.7rem 0 0.5rem'></div>"
+                        "<div class='eyebrow'>After past days like this</div>"
+                        f"<div class='past'>On the {stats['n']:,} days since {stats['since']:%Y} when gas "
+                        f"{dm.band_text(change, stats['band'])}, it averaged <b>{stats['avg_ahead']:+.1f}%</b> over "
+                        f"the next week and rose {stats['pct_up']:.0f}% of the time: {verdict} "
+                        f"({stats['base_avg']:+.1f}%, rose {stats['base_up']:.0f}%).</div>", unsafe_allow_html=True)
+        with b:
+            ui.eyebrow("What the news says")
+            heads = gas_headlines()
+            hot = [] if heat.empty else list(heat[heat["enough"] & (heat["heat"] >= 1.5)]["topic"])
+            reasons = dm.likely_reasons(heads, change, hot, subject=dm.GAS_SUBJECT, hours=48) if len(heads) else heads
+            if len(reasons):
+                headline_rows(reasons)
+            else:
+                st.caption("No gas headline in the last two days explains the move yet. Gas often moves on "
+                           "weather forecasts, which rarely make the news.")
+            ui.tip("Headlines from the last two days that report gas moving the same way as the market "
+                   "(\"Natural gas jumps as...\"), which usually give the reason, then the newest stories on the "
+                   "busiest gas topics. They are the likeliest explanations, not proof of cause.",
+                   "How these are picked")
+
+
+def headline_rows(heads: pd.DataFrame) -> None:
+    rows = []
+    for _, h in heads.iterrows():
+        title = html.escape(ui.headline_case(str(h["headline"])))
+        link = f'<a href="{html.escape(str(h["url"]))}" target="_blank" rel="noopener">{title}</a>'
+        summary = html.escape(str(h.get("summary") or ""))[:220]
+        chips = "".join(ui.chip(news.topic_info(t)["label"], news.topic_info(t)["color"]) for t in h["topics"])
+        rows.append(f'<div class="headline">{link}<div class="summary">{summary}</div>'
+                    f'<div class="meta">{chips}<span class="publisher">{html.escape(str(h["source"]))}</span>'
+                    f' · {news_page._ago(h["time"])}</div></div>')
+    st.markdown("".join(rows), unsafe_allow_html=True)
+
+
 def topic_cards() -> None:
     if heat.empty:
         st.info("Gas news coverage is still being collected. It's refreshed every 3 hours.")
@@ -205,22 +279,15 @@ def headlines() -> None:
     if heads.empty:
         st.info("No natural gas headlines in the last day or two.")
         return
-    rows = []
-    for _, h in heads.head(12).iterrows():
-        title = html.escape(ui.headline_case(str(h["headline"])))
-        link = f'<a href="{html.escape(str(h["url"]))}" target="_blank" rel="noopener">{title}</a>'
-        summary = html.escape(str(h.get("summary") or ""))[:220]
-        chips = "".join(ui.chip(news.topic_info(t)["label"], news.topic_info(t)["color"]) for t in h["topics"])
-        rows.append(f'<div class="headline">{link}<div class="summary">{summary}</div>'
-                    f'<div class="meta">{chips}<span class="publisher">{html.escape(str(h["source"]))}</span>'
-                    f' · {news_page._ago(h["time"])}</div></div>')
-    st.markdown("".join(rows), unsafe_allow_html=True)
+    headline_rows(heads.head(12))
     ui.tip("Articles from our publishers' news feeds that mention natural gas, LNG or Henry Hub, newest first.",
            "About these stories")
 
 
 with tab_news:
     try:
+        why_today()
+        st.write("")
         topic_cards()
         st.write("")
         coming_up()
@@ -231,7 +298,52 @@ with tab_news:
 
 
 # Storage reports -----------------------------------------------------------------------
+def five_year_chart() -> None:
+    view = gs.five_year_view(gs.load_storage())
+    st.subheader("Storage against the last 5 years", anchor=False)
+    above = view["vs_average_pct"] >= 0
+    ui.kpi_row([
+        ("Gas in storage", f"{view['level']:,.0f} Bcf", f"week ending {ui.day(view['week_ending'], year=False)}", None),
+        ("vs 5-year average", f"{view['vs_average_pct']:+.1f}%",
+         f"{abs(view['vs_average_bcf']):,.0f} Bcf {'more' if above else 'less'} than normal: "
+         f"{'plenty of gas (bearish)' if above else 'tighter than normal (bullish)'}",
+         "#c43a39" if above else "#1d8a5e"),
+        ("vs a year ago", f"{view['vs_last_year_pct']:+.1f}%", "same week last year", None),
+        ("5-year range", f"{view['low']:,.0f} to {view['high']:,.0f}", "Bcf, lowest and highest for this week", None),
+    ])
+    t = view["table"]
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=t["week"], y=t["high"], mode="lines", line=dict(width=0), showlegend=False,
+                             hoverinfo="skip"))
+    fig.add_trace(go.Scatter(x=t["week"], y=t["low"], mode="lines", line=dict(width=0), fill="tonexty",
+                             fillcolor="rgba(15, 118, 110, 0.13)", name=f"5-year range ({view['year'] - 5}-{view['year'] - 1})",
+                             hovertemplate="Week %{x}: lowest %{y:,.0f} Bcf<extra></extra>"))
+    fig.add_trace(go.Scatter(x=t["week"], y=t["average"], mode="lines", name="5-year average",
+                             line=dict(color="#0f766e", width=1.5, dash="dot"),
+                             hovertemplate="Week %{x}: average %{y:,.0f} Bcf<extra></extra>"))
+    fig.add_trace(go.Scatter(x=t["week"], y=t["last_year"], mode="lines", name=str(view["year"] - 1),
+                             line=dict(color="#9a988f", width=1.5),
+                             hovertemplate="Week %{x}: %{y:,.0f} Bcf<extra></extra>"))
+    fig.add_trace(go.Scatter(x=t["week"], y=t["this_year"], mode="lines+markers", name=str(view["year"]),
+                             line=dict(color="#1f3a5f", width=3), marker=dict(size=4),
+                             hovertemplate="Week %{x}: %{y:,.0f} Bcf<extra></extra>"))
+    month_ticks = [1, 5, 9, 14, 18, 22, 27, 31, 36, 40, 44, 48]
+    month_names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    ui.base_layout(fig, 400, hovermode="x unified", yaxis_title="Billion cubic feet (Bcf)")
+    fig.update_xaxes(tickvals=month_ticks, ticktext=month_names, range=[1, 52])
+    st.plotly_chart(fig, width="stretch", config=ui.CHART_CONFIG, key="gas_five_year")
+    ui.tip("Storage rises from about April to October (injection season) and falls in winter (withdrawal "
+           "season). The shaded band is the lowest-to-highest level for each week over the previous 5 years. "
+           "Above the average line means more gas than usual; below means less, and a cold winter starting "
+           "from below normal is when prices tend to spike.", "How to read this")
+
+
 with tab_storage:
+    try:
+        five_year_chart()
+    except Exception as error:
+        st.error(f"This section hit a problem: {error}")
+    st.write("")
     st.subheader("The weekly storage report", anchor=False)
     st.markdown("Every Thursday the EIA reports how much natural gas went into or out of underground storage. "
                 "What moves prices is the **surprise**: a smaller injection or bigger withdrawal than normal "
@@ -267,7 +379,73 @@ with tab_storage:
 
 
 # Price history ----------------------------------------------------------------------
+def season_and_curve() -> None:
+    name, explain = gs.season(pd.Timestamp.now())
+    st.subheader("Where we are in the gas year", anchor=False)
+    st.markdown(f"**{name}.** {explain}")
+
+    st.write("")
+    st.markdown("**The futures curve: what gas costs for each month ahead**")
+    curve = gas_curve(pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%d %H"))
+    if curve.empty:
+        st.info("The futures curve isn't available right now. It comes from a free price feed that sometimes "
+                "doesn't answer; try again later.")
+    else:
+        winter = curve[curve["month"].dt.month.isin([12, 1, 2])].head(3)
+        summer = curve[curve["month"].dt.month.isin([4, 5, 6, 7, 8, 9, 10])].head(7)
+        if len(winter) and len(summer):
+            w, sm = winter["now"].mean(), summer["now"].mean()
+            st.markdown(f"Gas for the coming winter ({winter['month'].iloc[0]:%b %Y} to {winter['month'].iloc[-1]:%b %Y}) "
+                        f"costs **${w:.2f}**, against **${sm:.2f}** for next summer: a winter premium of "
+                        f"**{(w / sm - 1) * 100:.0f}%**. "
+                        + ("That's a big premium: traders expect a tight winter." if w / sm > 1.3 else
+                           "A normal-sized premium." if w / sm > 1.1 else
+                           "A small premium: traders aren't worried about winter supply."))
+        fig = go.Figure()
+        for _, r in curve.iterrows():
+            if r["month"].month in (12, 1, 2):
+                fig.add_vrect(x0=r["month"] - pd.Timedelta(days=15), x1=r["month"] + pd.Timedelta(days=15),
+                              fillcolor="rgba(59, 130, 246, 0.08)", line_width=0, layer="below")
+        fig.add_trace(go.Scatter(x=curve["month"], y=curve["1 month ago"], mode="lines", name="1 month ago",
+                                 line=dict(color="#c9c7bd", width=1.6),
+                                 hovertemplate="%{x|%b %Y}: $%{y:.2f}<extra>1 month ago</extra>"))
+        fig.add_trace(go.Scatter(x=curve["month"], y=curve["now"], mode="lines+markers", name="Today",
+                                 line=dict(color="#0f766e", width=3), marker=dict(size=5),
+                                 hovertemplate="%{x|%b %Y}: $%{y:.2f}<extra>today</extra>"))
+        ui.base_layout(fig, 340, hovermode="closest", yaxis_tickprefix="$", yaxis_title="$ per MMBtu",
+                       xaxis_title="Delivery month")
+        fig.update_xaxes(tickformat="%b %Y")
+        st.plotly_chart(fig, width="stretch", config=ui.CHART_CONFIG, key="gas_curve")
+        ui.tip("Each point is the price agreed today for gas delivered in that month (a futures contract). "
+               "Shaded bands are winter months (December to February), when heating demand peaks, so gas for "
+               "winter usually costs more: the 'winter premium'. Prices are NYMEX futures, about 10 minutes "
+               "delayed.", "How to read this")
+
+    st.write("")
+    st.markdown("**How gas usually moves in each month**")
+    pattern = gs.monthly_pattern(prices)
+    names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    this_month = pd.Timestamp.now().month
+    fig = go.Figure(go.Bar(
+        x=[names[m - 1] for m in pattern.index], y=pattern["typical"],
+        marker_color=["#1f3a5f" if m == this_month else ("#1d8a5e" if v >= 0 else "#c43a39")
+                      for m, v in zip(pattern.index, pattern["typical"])],
+        customdata=pattern[["rose", "years"]].values,
+        hovertemplate="%{x}: typical %{y:+.1f}% · rose in %{customdata[0]:.0f}% of %{customdata[1]} years<extra></extra>"))
+    ui.base_layout(fig, 300, yaxis_ticksuffix="%", yaxis_title="Typical change in the month", showlegend=False)
+    st.plotly_chart(fig, width="stretch", config=ui.CHART_CONFIG, key="gas_months")
+    ui.tip(f"Henry Hub's typical (median) change from the end of one month to the end of the next, since 2010. "
+           f"This month ({names[this_month - 1]}) is the dark bar. Patterns like these are tendencies, not rules: "
+           f"in most months gas rose in some years and fell in others (hover to see how often it rose).",
+           "How to read this")
+
+
 with tab_history:
+    try:
+        season_and_curve()
+    except Exception as error:
+        st.error(f"This section hit a problem: {error}")
+    st.write("")
     st.subheader("Henry Hub prices and gas news spikes", anchor=False)
     since = prices[prices.index >= "2010-01-01"]
     fig = go.Figure(go.Scatter(x=since.index, y=since.values, mode="lines", name="Henry Hub",

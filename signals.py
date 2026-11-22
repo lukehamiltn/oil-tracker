@@ -27,7 +27,7 @@ import live_prices
 CURVE_PATH = Path(__file__).parent / "news_data" / "curve.csv"
 MONTH_CODES = "FGHJKMNQUVXZ"          # futures month letters, January to December
 CURVE_MONTHS = 18                     # how far along the curve we look
-ROOTS = {"BRENT": "BZ", "WTI": "CL"}  # Yahoo's futures roots (NYMEX listings)
+ROOTS = {"BRENT": "BZ", "WTI": "CL", "NATGAS": "NG"}  # Yahoo's futures roots (NYMEX listings)
 SINCE = "2015-01-01"                  # "normal" ranges are measured from here
 FLAT = 1.0                            # a curve within +-1% is called flat
 

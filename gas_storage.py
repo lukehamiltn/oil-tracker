@@ -125,6 +125,53 @@ def build_events(storage: pd.Series) -> pd.DataFrame:
     return events[events["week_ending"] >= START].reset_index(drop=True)
 
 
+def five_year_view(storage: pd.Series) -> dict:
+    """This year's storage against the previous 5 years, week by week:
+    { table (week, this_year, last_year, low, high, average), latest numbers }.
+    Week numbers run 1-52 (a 53rd week is counted as 52)."""
+    s = storage.to_frame("bcf")
+    s["year"] = s.index.isocalendar().year.values
+    s["week"] = s.index.isocalendar().week.clip(upper=52).values
+    year = int(s["year"].iloc[-1])
+    past = s[(s["year"] >= year - 5) & (s["year"] < year)]
+    band = past.groupby("week")["bcf"].agg(low="min", high="max", average="mean")
+    this_year = s[s["year"] == year].groupby("week")["bcf"].last()
+    last_year = s[s["year"] == year - 1].groupby("week")["bcf"].last()
+    table = band.join(this_year.rename("this_year")).join(last_year.rename("last_year")).reset_index()
+    latest_week = int(s["week"].iloc[-1])
+    level = float(s["bcf"].iloc[-1])
+    row = band.loc[latest_week]
+    year_ago = last_year.get(latest_week, float("nan"))
+    return {
+        "table": table, "year": year, "week_ending": s.index[-1], "level": level,
+        "vs_average_pct": (level / row["average"] - 1) * 100,
+        "vs_average_bcf": level - row["average"],
+        "vs_last_year_pct": (level / year_ago - 1) * 100 if year_ago == year_ago else float("nan"),
+        "low": float(row["low"]), "high": float(row["high"]),
+    }
+
+
+def season(day: pd.Timestamp) -> tuple[str, str]:
+    """(name, explanation) of the storage season a day falls in."""
+    if day.month in (4, 5, 6, 7, 8, 9, 10):
+        return ("Injection season", "April to October: mild weather means more gas is produced than used, "
+                "so the extra is pumped into storage for winter.")
+    return ("Withdrawal season", "November to March: heating demand is high, so gas is drawn out of storage. "
+            "Cold snaps can drain it fast.")
+
+
+def monthly_pattern(prices: pd.Series, since: str = "2010-01-01") -> pd.DataFrame:
+    """How Henry Hub moved in each calendar month: the typical (median) %
+    change and how often it rose (month-end to month-end). The median, not
+    the average, so a couple of freak months (like Winter Storm Uri) don't
+    swamp the picture."""
+    monthly = prices[prices.index >= since].resample("ME").last().pct_change().dropna() * 100
+    table = monthly.groupby(monthly.index.month).agg(typical="median", rose=lambda s: (s > 0).mean() * 100,
+                                                     years="count")
+    table.index.name = "month"
+    return table
+
+
 def main() -> None:
     download_storage()
     events = build_events(load_storage())

@@ -117,14 +117,58 @@ TERMS = {
 }
 
 
-@st.dialog("Terminology", width="large")
-def show() -> None:
-    st.caption("The words the oil market uses, in plain English.")
+# The natural gas page's words
+GAS_TERMS = {
+    "Prices and units": [
+        ("Henry Hub", "A pipeline hub in Louisiana where U.S. natural gas is priced. 'The gas price' in the U.S. "
+                      "usually means the Henry Hub price."),
+        ("MMBtu", "Million British thermal units: the unit gas is priced in (a measure of energy). One MMBtu heats "
+                  "a typical home for a few days in winter."),
+        ("Bcf", "Billion cubic feet: the unit storage and production are measured in. The U.S. uses about 90 Bcf "
+                "of gas a day."),
+        ("Futures contract", "An agreement today on the price of gas delivered in a future month. The live price at "
+                             "the top of the page is the front-month futures contract."),
+        ("Winter premium", "Gas for delivery in winter months usually costs more than gas for summer, because "
+                           "heating demand peaks. A big premium means traders expect a tight winter."),
+        ("TTF", "The main European gas price (Dutch Title Transfer Facility). Usually far above Henry Hub, which is "
+                "why shipping U.S. gas to Europe as LNG pays."),
+    ],
+    "Storage": [
+        ("Working gas in storage", "Gas held underground (old reservoirs, salt caverns) ready to use. The EIA "
+                                   "reports the total for the Lower 48 states every Thursday."),
+        ("Injection", "Gas going INTO storage, mostly April to October when it's mild and gas is plentiful."),
+        ("Withdrawal", "Gas coming OUT of storage, mostly November to March when homes need heating."),
+        ("Injection / withdrawal season", "The yearly rhythm of gas: fill storage in summer, draw it down in "
+                                          "winter. Prices often react most in the 'shoulder' months between."),
+        ("5-year average", "The normal amount in storage for a given week, averaged over the last 5 years. "
+                           "Above it means plenty of gas (bearish); below means tight (bullish)."),
+        ("Storage surprise", "How far the week's change was from normal for that week. What moves prices is the "
+                             "surprise, not the raw number."),
+    ],
+    "Supply and demand": [
+        ("LNG", "Liquefied natural gas: gas cooled to a liquid so it can be shipped by sea. U.S. LNG exports send "
+                "American gas to Europe and Asia and link U.S. prices to the world."),
+        ("Feedgas", "Gas flowing into LNG export plants. A plant outage cuts feedgas, leaving more gas at home "
+                    "(usually lowering U.S. prices)."),
+        ("Degree days", "A measure of heating or cooling demand: how far each day's temperature is from 65°F. "
+                        "More heating degree days = colder = more gas burned."),
+        ("Cold snap / polar vortex", "A burst of very cold air. Heating demand spikes and wells can freeze, so "
+                                     "prices can jump in days (Winter Storm Uri, February 2021)."),
+        ("Shale gas", "Gas from U.S. shale rock (the Marcellus, Haynesville, Permian). It made the U.S. the "
+                      "world's biggest gas producer."),
+        ("Power burn", "Gas used to make electricity. Hot summers raise air-conditioning demand and power burn."),
+    ],
+    "Words used on this site": TERMS["Words used on this site"],
+}
+
+
+def _show(terms: dict, intro: str, key: str) -> None:
+    st.caption(intro)
     query = st.text_input("Find a word", placeholder="Search, e.g. contango",
-                          key="glossary_search", label_visibility="collapsed").strip().lower()
+                          key=key, label_visibility="collapsed").strip().lower()
     found = 0
-    for group, terms in TERMS.items():
-        shown = [(t, e) for t, e in terms
+    for group, entries in terms.items():
+        shown = [(t, e) for t, e in entries
                  if not query or query in t.lower() or query in e.lower()]
         if not shown:
             continue
@@ -135,3 +179,13 @@ def show() -> None:
                     unsafe_allow_html=True)
     if not found:
         st.info("No matching words. Try a shorter search.")
+
+
+@st.dialog("Terminology", width="large")
+def show() -> None:
+    _show(TERMS, "The words the oil market uses, in plain English.", "glossary_search")
+
+
+@st.dialog("Terminology", width="large")
+def show_gas() -> None:
+    _show(GAS_TERMS, "The words the natural gas market uses, in plain English.", "gas_glossary_search")

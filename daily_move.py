@@ -13,6 +13,8 @@ import pandas as pd
 # Headlines that report the day's price move ("Oil prices fall as...",
 # "Brent hits $94 after..."). These usually say why, in the headline itself.
 _SUBJECT = r"\b(oil|crude|brent|wti)\b"
+# The same for natural gas ("Natural gas prices jump as cold snap...")
+GAS_SUBJECT = r"\b(natural gas|nat ?gas|henry hub|lng|u\.s\. gas|gas futures)\b"
 _MOVE_DOWN = r"\b(falls?|fell|drops?|dropped|slips?|slides?|declines?|tumbles?|sinks?|eases?|" \
              r"plunges?|retreats?|dips?|lower|losses|slumps?|weakens?)\b"
 _MOVE_UP = r"\b(rises?|rose|gains?|jumps?|climbs?|rall(y|ies)|surges?|rebounds?|higher|" \
@@ -23,11 +25,11 @@ HISTORY_YEARS = 3      # "bigger than X% of days" compares with this many years
 NEXT_DAYS = 5          # "a week later" = 5 trading days
 
 
-def direction(headline: str) -> int:
-    """+1 if the headline reports oil rising, -1 falling, 0 if it isn't a
-    price-move headline."""
+def direction(headline: str, subject: str = _SUBJECT) -> int:
+    """+1 if the headline reports the market (oil, unless `subject` says
+    otherwise) rising, -1 falling, 0 if it isn't a price-move headline."""
     text = str(headline).lower()
-    if not re.search(_SUBJECT, text) or re.search(_NOT_PRICE, text):
+    if not re.search(subject, text) or re.search(_NOT_PRICE, text):
         return 0
     down, up = re.search(_MOVE_DOWN, text), re.search(_MOVE_UP, text)
     if down and not up:
@@ -81,23 +83,24 @@ def band_text(change_pct: float, band: tuple) -> str:
 
 
 def likely_reasons(heads: pd.DataFrame, change_pct: float, hot_topics: list[str],
-                   n: int = 4) -> pd.DataFrame:
+                   n: int = 4, subject: str = _SUBJECT, hours: int = 30) -> pd.DataFrame:
     """The headlines most likely to explain today's move: price-move headlines
-    from the last day going the same way as the market first, then the
-    newest stories from the topics getting the most extra coverage."""
+    from the last `hours` going the same way as the market first, then the
+    newest stories from the topics getting the most extra coverage.
+    (`subject`: what the market is called in headlines; oil unless given.)"""
     if heads.empty:
         return heads
-    since = pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=30)
+    since = pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=hours)
     recent = heads[heads["time"] >= since].reset_index(drop=True)
     if recent.empty:
         return recent
-    recent["direction"] = recent["headline"].map(direction)
+    recent["direction"] = recent["headline"].map(lambda h: direction(h, subject))
     sign = 1 if change_pct >= 0 else -1
     # Headlines that lead with oil ("Brent hits...", "Oil prices fall as...")
     # are about the move; ones that mention it in passing ("Yields jump as oil
     # gains") come after them
     recent["leads"] = recent["headline"].map(
-        lambda h: bool(re.search(_SUBJECT, " ".join(str(h).lower().split()[:4]))))
+        lambda h: bool(re.search(subject, " ".join(str(h).lower().split()[:4]))))
     wraps = recent[recent["direction"] == sign].sort_values(["leads", "time"],
                                                             ascending=[False, False])
     picked = wraps.drop_duplicates("headline").head(n)
