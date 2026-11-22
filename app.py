@@ -29,6 +29,8 @@ import alerts
 import live_prices
 import methodology
 import glossary
+import forecast
+import forecast_page
 import credentials
 import signals
 import signals_page
@@ -61,7 +63,7 @@ st.set_page_config(page_title="Oil Tracker · oil news and market history",
 # ---------------------------------------------------------------------------
 OWN_MODULES = [credentials, es, inv, md, fed, fetch_prices, strat, bt, bot, mediacloud_news, news, news_feeds, flash_sources, mn, upcoming, recap, mk, ui, daily_move, live_prices,
                storylines, conditions, lab_page, bot_dashboard, storylines_page, news_page, history_page,
-               methodology, glossary, signals, signals_page, alerts]
+               methodology, glossary, signals, signals_page, forecast, forecast_page, alerts]
 
 
 @st.cache_resource
@@ -280,10 +282,10 @@ tab_news, tab_signals, tab_history, tab_cond, tab_events, tab_research = st.tabs
 
 # Research: our own trading experiments, kept apart from the market pages
 with tab_research:
-    st.caption("Our own experiments: simple trading rules tested on past prices, and bots "
-               "that trade them with pretend money. Not advice, and past results don't "
-               "promise future ones.")
-    tab_lab, tab_bots = st.tabs(["Strategy lab", "Trading bots"])
+    st.caption("Our own experiments: simple trading rules tested on past prices, a model that "
+               "tries to forecast next week, and bots that trade with pretend money. Not advice, "
+               "and past results don't promise future ones.")
+    tab_lab, tab_forecast, tab_bots = st.tabs(["Strategy lab", "Forecast model", "Trading bots"])
 
 with tab_signals:
     safe(signals_page.render, data)
@@ -313,6 +315,9 @@ with tab_cond:
 with tab_lab:
     safe(lab_page.render, data["features"], *data["backtests"], data["inv_events"],
          now_features, recent_days)
+
+with tab_forecast:
+    safe(forecast_page.render, now_features, now_features["price"])
 
 # ---------------------------------------------------------------------------
 # Scheduled events: EIA reports, OPEC+ meetings, Fed decisions.

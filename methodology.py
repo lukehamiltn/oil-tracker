@@ -119,6 +119,11 @@ cards on the News tab. When a topic reaches "Spiking" it sends a push notificati
 (through the free ntfy app) with the latest headline and what happened after past
 spikes. Each spike alerts once.
 
+**Forecast model** (Research tab) is a small machine-learning model (logistic regression,
+plus gradient-boosted trees for comparison) that estimates the chance Brent is higher a week
+later, from the same facts as the strategy lab. It's tested walk-forward: retrained every month
+on what was known then, scored on the following month, and compared with always guessing "up".
+
 **Trading bots** (Research tab) trade fake money in an Alpaca paper account at real prices, checking
 once each weekday in the two hours before the 4pm ET close.
 """)

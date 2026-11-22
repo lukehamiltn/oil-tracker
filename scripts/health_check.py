@@ -25,7 +25,7 @@ sys.path.insert(0, str(ROOT))
 URL = os.environ.get("SITE_URL", "https://oil-tracker-q7rqjuftmvvqnrgbkzwjcd.streamlit.app/")
 # (Strategy lab and Trading bots sit inside Research, so Research comes first)
 TABS = ["News", "Market signals", "Event history", "Market conditions", "Scheduled events",
-        "Research", "Strategy lab", "Trading bots"]
+        "Research", "Strategy lab", "Forecast model", "Trading bots"]
 BROKEN = "This section hit a problem"
 
 
