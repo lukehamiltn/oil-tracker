@@ -15,43 +15,23 @@ and add an st.Page line below.
 
 import importlib
 import os
+import sys
 
 import streamlit as st
-
-import alerts
-import conditions
-import credentials
-import daily_move
-import event_study
-import fetch_prices
-import commodity_news
-import gas_review
-import gold_review
-import gas_storage
-import glossary
-import live_prices
-import markets
-import mediacloud_news
-import news
-import news_feeds
-import news_page
-import recap
-import signals
-import sites
-import storylines
-import storylines_page
-import ui
-import weather
 
 st.set_page_config(page_title="Market Tracker · commodity news and market history",
                    page_icon=":material/monitoring:", layout="wide")
 
 # Streamlit Cloud can keep OLD copies of our files after an update (new page +
-# old ui.py = crash). Reload the shared ones whenever any changed on disk, so
-# every page starts from current code. (oil.py does the same for its own.)
-SHARED = [credentials, event_study, fetch_prices, live_prices, markets, mediacloud_news, news, news_feeds,
-          daily_move, signals, ui, storylines, storylines_page, glossary, news_page, gas_storage, sites,
-          weather, recap, conditions, commodity_news, gas_review, gold_review, alerts]
+# old ui.py = crash). So our shared files are loaded one at a time, in this
+# order (each after the files it uses), and any copy already in memory is
+# reloaded when the file changed on disk: a new file never meets an old copy
+# of something it needs. Once one file is reloaded, every file after it is
+# too (they may hold on to parts of it). oil.py does the same for its own.
+SHARED = ["credentials", "event_study", "fetch_prices", "live_prices", "markets", "news", "flash_sources",
+          "market_news", "mediacloud_news", "news_feeds", "daily_move", "signals", "ui", "glossary",
+          "storylines", "weather", "gas_storage", "sites", "fed_events", "recap", "conditions", "news_page",
+          "storylines_page", "commodity_news", "gas_review", "gold_review", "alerts"]
 
 
 @st.cache_resource
@@ -60,12 +40,15 @@ def _versions() -> dict:
 
 
 seen = _versions()
-current = {m.__name__: os.path.getmtime(m.__file__) for m in SHARED}
-if seen != current:
-    for module in SHARED:
+changed = False
+for name in SHARED:
+    in_memory = name in sys.modules
+    module = importlib.import_module(name)
+    stamp = os.path.getmtime(module.__file__)
+    if in_memory and (changed or seen.get(name) != stamp):
         importlib.reload(module)
-    seen.clear()
-    seen.update(current)
+        changed = True
+    seen[name] = stamp
 
 pages = [
     st.Page("home.py", title="All markets", icon=":material/home:", default=True),
