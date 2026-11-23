@@ -15,6 +15,10 @@ news.TOPICS.
 The archive lives in news_data/market_news/, one CSV per month. A GitHub
 Action refreshes the current month every few hours.
 
+Gold has its own archive (news_data/gold_news/), collected the same way
+through gold tickers (GOLD_SYMBOLS: gold funds and the big miners):
+    python market_news.py update-gold
+
 Run it with:
     python market_news.py update     download missing months + refresh this month
     python market_news.py latest     show the latest oil headlines
@@ -42,6 +46,10 @@ MARKET_TZ = "America/New_York"     # news is dated by the New York trading day
 SYMBOLS = ["USO", "BNO", "UCO", "SCO", "XLE", "XOP", "OIH", "XOM", "CVX", "COP",
            "OXY", "BP", "SHEL", "SLB", "HAL", "MPC", "VLO", "PSX"]
 COLUMNS = ["time", "headline", "summary", "source", "url", "topics"]
+GOLD_DIR = Path(__file__).parent / "news_data" / "gold_news"
+GOLD_SYMBOLS = ["GLD", "IAU", "GDX", "GDXJ", "NEM", "GOLD", "AEM", "KGC", "AU", "FNV", "WPM"]
+# A gold archive story must actually be about gold (miners' news is often not)
+GOLD_WORDS = re.compile(r"\bgold\b|bullion|precious metal|\bounce", re.I)
 
 # Words that make a headline about oil (used to drop e.g. "Exxon stock split" noise
 # from the headline list; topic-tagged headlines are always kept)
@@ -65,13 +73,13 @@ def _clean(text: str, limit: int) -> str:
 
 
 def fetch(start: pd.Timestamp, end: pd.Timestamp, timeout: float = 30,
-          max_pages: int | None = None, waits: int = 3) -> pd.DataFrame:
+          max_pages: int | None = None, waits: int = 3, symbols: list[str] = SYMBOLS) -> pd.DataFrame:
     """All articles for our tickers between start and end (UTC timestamps).
     If Alpaca says "too many requests", wait 20s and retry, at most `waits`
     times (the website passes 0, so it never waits)."""
     headers, rows, token, pages = _headers(), [], None, 0
     while True:
-        params = {"symbols": ",".join(SYMBOLS), "limit": 50, "sort": "desc",
+        params = {"symbols": ",".join(symbols), "limit": 50, "sort": "desc",
                   "start": start.strftime("%Y-%m-%dT%H:%M:%SZ"),
                   "end": end.strftime("%Y-%m-%dT%H:%M:%SZ")}
         if token:
@@ -132,24 +140,27 @@ def to_table(rows: list[dict]) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 # The archive: one CSV per month
 # ---------------------------------------------------------------------------
-def _month_file(month: pd.Period) -> Path:
-    return ARCHIVE_DIR / f"{month}.csv"
+def _month_file(month: pd.Period, folder: Path = ARCHIVE_DIR) -> Path:
+    return folder / f"{month}.csv"
 
 
-def update() -> None:
+def update(folder: Path = ARCHIVE_DIR, symbols: list[str] = SYMBOLS, keep=None) -> None:
     """Download any missing months, and refresh the current month (plus the
-    previous month during the first days of a new month)."""
-    ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
+    previous month during the first days of a new month). `keep`: optional
+    function(table) -> the rows worth saving."""
+    folder.mkdir(parents=True, exist_ok=True)
     now = pd.Timestamp.now(tz="UTC")
     this_month = now.tz_localize(None).to_period("M")
     refresh = {this_month} | ({this_month - 1} if now.day <= 3 else set())
     for month in pd.period_range(ARCHIVE_START, this_month, freq="M"):
-        path = _month_file(month)
+        path = _month_file(month, folder)
         if path.exists() and month not in refresh:
             continue
         start = month.start_time.tz_localize("UTC")
         end = min(month.end_time.tz_localize("UTC"), now)
-        table = fetch(start, end)
+        table = fetch(start, end, symbols=symbols)
+        if keep is not None:
+            table = keep(table)
         if path.exists():
             saved = len(pd.read_csv(path, usecols=["headline"]))
             if len(table) < 0.8 * saved:      # a glitch, not news disappearing
@@ -160,8 +171,21 @@ def update() -> None:
         print(f"{month}: {len(table):,} articles")
 
 
-def load_archive() -> pd.DataFrame:
-    files = sorted(ARCHIVE_DIR.glob("*.csv"))
+def about_gold(table: pd.DataFrame) -> pd.DataFrame:
+    text = table["headline"].fillna("") + " " + table["summary"].fillna("")
+    return table[text.str.contains(GOLD_WORDS) & ~table["headline"].map(is_analyst_note)]
+
+
+def update_gold() -> None:
+    update(GOLD_DIR, GOLD_SYMBOLS, keep=about_gold)
+
+
+def load_gold_archive() -> pd.DataFrame:
+    return load_archive(GOLD_DIR)
+
+
+def load_archive(folder: Path = ARCHIVE_DIR) -> pd.DataFrame:
+    files = sorted(folder.glob("*.csv"))
     if not files:
         return pd.DataFrame(columns=COLUMNS).assign(time=pd.Series(dtype="datetime64[ns, UTC]"))
     t = pd.concat([pd.read_csv(f, keep_default_na=False) for f in files], ignore_index=True)
@@ -325,6 +349,8 @@ def main() -> None:
     command = sys.argv[1] if len(sys.argv) > 1 else "update"
     if command == "update":
         update()
+    elif command == "update-gold":
+        update_gold()
     elif command == "latest":
         for _, h in latest().head(30).iterrows():
             print(f"{h['time']:%m-%d %H:%M} {', '.join(h['topics']) or '-':20} {h['headline'][:90]}")

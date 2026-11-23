@@ -12,6 +12,7 @@ news.COOLDOWN_DAYS.
 
 Natural gas has its own channel (GAS_CHANNEL): `--gas` checks the gas news
 topics instead and sends there. Gas topics are remembered as "gas:<topic>".
+Gold works the same way: `--gold`, GOLD_CHANNEL, "gold:<topic>".
 
 Run it yourself:
     python alerts.py --dry-run          # print what would be sent, send nothing
@@ -38,12 +39,18 @@ SUBSCRIBE_URL = NTFY_URL + CHANNEL
 GAS_CHANNEL = "gastracker-q7rq-alerts"
 GAS_SITE_URL = SITE_URL + "gas"
 GAS_SUBSCRIBE_URL = NTFY_URL + GAS_CHANNEL
+GOLD_CHANNEL = "goldtracker-q7rq-alerts"
+GOLD_SITE_URL = SITE_URL + "gold"
+GOLD_SUBSCRIBE_URL = NTFY_URL + GOLD_CHANNEL
+# For each market with its own channel: (channel, page, button label)
+CHANNELS = {"oil": (CHANNEL, SITE_URL, "Open Oil Tracker"),
+            "gas": (GAS_CHANNEL, GAS_SITE_URL, "Open Natural Gas Tracker"),
+            "gold": (GOLD_CHANNEL, GOLD_SITE_URL, "Open Gold Tracker")}
 STATE_PATH = Path(__file__).parent / "news_data" / "alerts_sent.json"
 
 
-def send(title: str, message: str, tags: list[str], gas: bool = False) -> None:
-    channel, site = (GAS_CHANNEL, GAS_SITE_URL) if gas else (CHANNEL, SITE_URL)
-    label = "Open Natural Gas Tracker" if gas else "Open Oil Tracker"
+def send(title: str, message: str, tags: list[str], gas: bool = False, market: str | None = None) -> None:
+    channel, site, label = CHANNELS[market or ("gas" if gas else "oil")]
     response = requests.post(NTFY_URL, timeout=20, json={
         "topic": channel, "title": title, "message": message, "tags": tags,
         "click": site, "actions": [{"action": "view", "label": label, "url": site}]})
@@ -106,7 +113,7 @@ def main(dry_run: bool = False) -> None:
     # Past reactions in every market (prices first, so the history is current)
     fetch_prices.main()
     markets = mk.load_markets()
-    sig = mk.Significance(markets)
+    sig = mk.Significance(markets, center="both")
     spikes = news.all_spikes(timelines) if source == "world" else \
         news.all_spikes(mn.topic_timelines(archive), "market")
     by_market = mk.reactions(markets, spikes)
@@ -136,8 +143,8 @@ def main(dry_run: bool = False) -> None:
         save_state(state)
 
 
-def gas_headline(topic: str) -> str | None:
-    """The newest gas headline about this topic from the publishers' feeds."""
+def gas_headline(topic: str, topics: dict = news.GAS_TOPICS) -> str | None:
+    """The newest headline about this topic from the publishers' feeds."""
     try:
         import news_feeds as nf
         pool = nf.fetch(oil_only=False)
@@ -146,7 +153,7 @@ def gas_headline(topic: str) -> str | None:
         return None
     if pool.empty:
         return None
-    hits = pool[pool["headline"].fillna("").map(lambda h: topic in news.classify_gas(h))]
+    hits = pool[pool["headline"].fillna("").map(lambda h: topic in news.classify_in(topics, h))]
     return hits.sort_values("time")["headline"].iloc[-1] if len(hits) else None
 
 
@@ -193,6 +200,53 @@ def main_gas(dry_run: bool = False) -> None:
         save_state(state)
 
 
+def main_gold(dry_run: bool = False) -> None:
+    """Alerts for gold news spikes, sent to the gold channel."""
+    import gold_review
+    import mediacloud_news
+    import news_feeds as nf
+    timelines = mediacloud_news.load(mediacloud_news.GOLD_PATH)
+    if timelines.empty:
+        print("No gold coverage saved yet.")
+        return
+    heat = news.current_heat(timelines)
+    hot = heat[(heat["heat"] >= news.SPIKE_RATIO) & heat["enough"] & heat["big_enough"]]
+    print("Gold coverage: " + ", ".join(f"{r.topic} {r.heat:.1f}x" for r in heat.itertuples()))
+    state = load_state()
+    today = pd.Timestamp.now(tz="UTC").normalize().tz_localize(None)
+    due = [r for r in hot.itertuples()
+           if f"gold:{r.topic}" not in state
+           or (today - pd.Timestamp(state[f"gold:{r.topic}"])).days >= news.COOLDOWN_DAYS]
+    if not due:
+        print("No new gold spikes to alert on.")
+        return
+    data = gold_review.build_data()
+    results = data["spike_react"][0]
+    for r in due:
+        title = f"{r.label}: gold news coverage {r.heat:.1f}x normal"
+        lines = [f"{r.articles_3d:,} articles in the last 3 days."]
+        try:
+            pool = nf.fetch(terms=nf.GOLD_TERMS)
+            hits = pool[pool["headline"].map(lambda h: r.topic in news.classify_in(news.GOLD_TOPICS, h))]
+            if len(hits):
+                lines.append(f"Latest: {hits.sort_values('time')['headline'].iloc[-1]}")
+        except Exception as error:
+            print(f"News feeds unavailable: {error!r}")
+        week = results.loc[results["topic"] == r.topic, "day_5_pct"].dropna() if not results.empty else []
+        if len(week):
+            verdict = data["sig"].check("GOLD", 5, week)
+            lines.append(f"After {len(week)} past spikes, gold averaged {week.mean():+.1f}% over the next week "
+                         f"and rose {(week > 0).mean():.0%} of the time ({mk.VERDICTS[verdict][0].lower()}).")
+        lines.append("History, not a forecast.")
+        message = "\n\n".join(lines)
+        print(f"\n--- {title}\n{message}")
+        if not dry_run:
+            send(title, message, ["coin", "chart_with_upwards_trend"], market="gold")
+            state[f"gold:{r.topic}"] = f"{today:%Y-%m-%d}"
+    if not dry_run:
+        save_state(state)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true", help="print, don't send")
@@ -200,8 +254,23 @@ if __name__ == "__main__":
     parser.add_argument("--weekly", action="store_true",
                         help="send the Saturday 'week in review' summary")
     parser.add_argument("--gas", action="store_true", help="natural gas instead of oil")
+    parser.add_argument("--gold", action="store_true", help="gold instead of oil")
     args = parser.parse_args()
-    if args.gas and args.weekly:
+    if args.gold and args.weekly:
+        import gold_review
+        title, message = gold_review.weekly_message(gold_review.build_data())
+        print(title)
+        print(message)
+        if not args.dry_run:
+            send(title, message, ["calendar"], market="gold")
+    elif args.gold and args.test:
+        send("Gold Tracker alerts are working",
+             "You'll get a message here when a gold news topic starts spiking, "
+             "with what happened after past spikes.", ["white_check_mark"], market="gold")
+        print(f"Test message sent to {GOLD_SUBSCRIBE_URL}")
+    elif args.gold:
+        main_gold(dry_run=args.dry_run)
+    elif args.gas and args.weekly:
         import gas_review
         title, message = gas_review.weekly_message(gas_review.build_data())
         print(title)

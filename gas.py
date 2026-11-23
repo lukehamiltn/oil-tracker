@@ -6,7 +6,7 @@ The natural gas site (the /gas page).
   News     Today: why gas moved, the 2-week weather outlook, gas news topics
            (click one for its stories), what's coming up, and the latest gas
            headlines, each with what Henry Hub did after similar past stories.
-           Also: Like this before, Topics over time, and Search (gas_news.py)
+           Also: Like this before, Topics over time, and Search (commodity_news.py)
   Week in review  how gas moved each week, the storage report, what made the
            news, and what history suggested vs what happened
   Storage  storage against the last 5 years, and the weekly EIA report: how
@@ -33,7 +33,7 @@ import conditions
 import daily_move as dm
 import event_study as es
 import fetch_prices
-import gas_news
+import commodity_news as cn
 import gas_review
 import gas_storage as gs
 import glossary
@@ -52,7 +52,7 @@ import weather
 ui.apply_styles()
 
 MARKET = "NATGAS"
-GAS_TERMS = gas_news.GAS_TERMS
+SPEC = cn.GAS          # the shared News tab, set up for gas
 
 
 # Data ---------------------------------------------------------------------------
@@ -127,24 +127,9 @@ def news_archive() -> pd.DataFrame:
     return mn.load_archive()
 
 
-@st.cache_data(ttl=15 * 60, show_spinner=False)
 def gas_headlines() -> pd.DataFrame:
     """Recent articles about natural gas from the publishers' feeds."""
-    try:
-        pool = nf.fetch(oil_only=False)
-    except Exception as error:
-        print(f"News feeds unavailable: {error}")
-        pool = pd.DataFrame(columns=nf.COLUMNS)
-    if pool.empty:
-        saved = news_page.feed_archive()
-        since = pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=3)
-        pool = saved[saved["time"] >= since] if not saved.empty else saved
-    if pool.empty:
-        return pool
-    text = pool["headline"].fillna("") + " " + pool["summary"].fillna("")
-    gas = pool[text.str.contains(GAS_TERMS)].copy()
-    gas["topics"] = gas["headline"].map(lambda h: news.classify_gas(str(h)))
-    return gas.sort_values("time", ascending=False).drop_duplicates("headline")
+    return cn.live_headlines(SPEC.key)
 
 
 data = get_data()
@@ -202,51 +187,7 @@ tab_news, tab_review, tab_storage, tab_history, tab_cond, tab_stories = st.tabs(
 
 # News ---------------------------------------------------------------------------------
 def why_today() -> None:
-    """Today's Henry Hub move, how unusual it is, the headlines most likely
-    behind it, and what gas did the week after past days like it."""
-    if not q or q.get("change_pct") is None:
-        return
-    change, t = q["change_pct"], q["time"]
-    is_today = pd.Timestamp.now(tz=t.tz).date() == t.date()
-    stats = dm.move_stats(prices, change)
-    up = change >= 0
-    color = "#1d8a5e" if up else "#c43a39"
-    clock = f"{t.hour % 12 or 12}:{t:%M} {'pm' if t.hour >= 12 else 'am'} ET"
-    quiet = abs(change) < 1
-    years = f"trading days in the past {dm.HISTORY_YEARS} years"
-    rank = (f"A quiet day: a smaller move than {100 - stats['bigger_than']:.0f}% of {years}"
-            if quiet else f"A bigger move than {stats['bigger_than']:.0f}% of {years}")
-    st.subheader("Why gas moved today" if is_today else "Gas's last session", anchor=False)
-    with st.container(border=True, key="why_today"):
-        a, b = st.columns([2, 3], gap="large")
-        with a:
-            ui.eyebrow(f"Henry Hub gas · {ui.day(t, year=False, weekday=True)}, {clock}")
-            st.markdown(f"<div class='why-move' style='color:{color}'>{'▲' if up else '▼'} {change:+.1f}%</div>"
-                        f"<div class='why-price'>${q['price']:.2f} per MMBtu</div><div class='why-rank'>{rank}</div>",
-                        unsafe_allow_html=True)
-            diff = stats["avg_ahead"] - stats["base_avg"]
-            verdict = ("about the same as any week, so a day like this says little about the next one"
-                       if abs(diff) < 1 else f"{'better' if diff > 0 else 'worse'} than a typical week")
-            st.markdown("<div class='card-rule' style='margin:0.7rem 0 0.5rem'></div>"
-                        "<div class='eyebrow'>After past days like this</div>"
-                        f"<div class='past'>On the {stats['n']:,} days since {stats['since']:%Y} when gas "
-                        f"{dm.band_text(change, stats['band'])}, it averaged <b>{stats['avg_ahead']:+.1f}%</b> over "
-                        f"the next week and rose {stats['pct_up']:.0f}% of the time: {verdict} "
-                        f"({stats['base_avg']:+.1f}%, rose {stats['base_up']:.0f}%).</div>", unsafe_allow_html=True)
-        with b:
-            ui.eyebrow("What the news says")
-            heads = gas_headlines()
-            hot = [] if heat.empty else list(heat[heat["enough"] & (heat["heat"] >= 1.5)]["topic"])
-            reasons = dm.likely_reasons(heads, change, hot, subject=dm.GAS_SUBJECT, hours=48) if len(heads) else heads
-            if len(reasons):
-                headline_rows(reasons)
-            else:
-                st.caption("No gas headline in the last two days explains the move yet. Gas often moves on "
-                           "weather forecasts, which rarely make the news.")
-            ui.tip("Headlines from the last two days that report gas moving the same way as the market "
-                   "(\"Natural gas jumps as...\"), which usually give the reason, then the newest stories on the "
-                   "busiest gas topics. They are the likeliest explanations, not proof of cause.",
-                   "How these are picked")
+    cn.why_today(SPEC, q, prices, gas_headlines(), heat, headline_rows)
 
 
 def weather_section() -> None:
@@ -291,60 +232,12 @@ def weather_section() -> None:
 def headline_rows(heads: pd.DataFrame, history: bool = True) -> None:
     """Gas headlines; with `history`, each gets a 'Last time' line (what Henry
     Hub did after similar past stories), when there are enough close matches."""
-    archive = news_archive() if history else pd.DataFrame()
-    rows = []
-    for _, h in heads.iterrows():
-        try:
-            past = gas_news.history_line(h, prices, archive, data["sig"]) if history else ""
-        except Exception as error:
-            print(f"No history line: {error!r}")
-            past = ""
-        title = html.escape(ui.headline_case(str(h["headline"])))
-        link = f'<a href="{html.escape(str(h["url"]))}" target="_blank" rel="noopener">{title}</a>'
-        summary = html.escape(str(h.get("summary") or ""))[:220]
-        chips = "".join(ui.chip(news.topic_info(t)["label"], news.topic_info(t)["color"]) for t in h["topics"])
-        rows.append(f'<div class="headline">{link}<div class="summary">{summary}</div>'
-                    f'<div class="meta">{chips}<span class="publisher">{html.escape(str(h["source"]))}</span>'
-                    f' · {news_page._ago(h["time"])}</div>{past}</div>')
-    st.markdown("".join(rows), unsafe_allow_html=True)
+    cn.headline_rows(SPEC, heads, prices, news_archive(), data["sig"] if history else None)
 
 
 def topic_cards() -> None:
-    if heat.empty:
-        st.info("Gas news coverage is still being collected. It's refreshed every 3 hours.")
-        return
-    st.subheader("What's in the gas news", anchor=False)
-    st.caption(f"Coverage of each topic over the last 3 days compared with normal, in about 1,600 news sites "
-               f"(data to {ui.day(heat['last_day'].max())}). For each: what Henry Hub did the week after past spikes.")
-    results = data["spike_react"][0]
-    st.html(ui.CARD_CSS)  # the card styling the oil site uses
-    cols = st.columns(len(heat))
-    for col, (_, row) in zip(cols, heat.iterrows()):
-        label, color, tint = news_page.status(row["heat"], row["enough"], row["big_enough"])
-        info = news.topic_info(row["topic"])
-        with col.container(border=True, height="stretch"):
-            number_color = color if label in ("Spiking", "Elevated") else "#1d1d1b"
-            st.markdown(ui.status_line(label, color) + f"<div class='card-title'>{info['label']}</div>"
-                        f"<span class='heat-num' style='color:{number_color}'>{row['heat']:.1f}×</span>"
-                        " <span class='heat-unit'>normal coverage</span>" + ui.heat_gauge(row["heat"], color),
-                        unsafe_allow_html=True)
-            past = results[results["topic"] == row["topic"]] if not results.empty else results
-            if len(past):
-                week = past["day_5_pct"]
-                p = data["sig"].p_value(MARKET, 5, week)
-                verdict = data["sig"].verdict(p, week.notna().sum())
-                st.markdown("<div class='card-rule'></div>"
-                            f"<div class='eyebrow' style='margin-top:0.4rem'>After {len(past)} past spikes</div>"
-                            f"<div class='past'>Gas typically <b>{week.median():+.1f}%</b> the next week · rose "
-                            f"{(week > 0).mean():.0%} of the time</div>"
-                            + ui.verdict_badge(verdict, ui.verdict_tip(verdict, p, int(week.notna().sum()),
-                                                                      "week for gas"), quiet=True),
-                            unsafe_allow_html=True)
-            else:
-                st.caption("No past spikes to compare with yet.")
-            if st.button("Latest stories →", key=f"gas_stories_{row['topic']}", type="tertiary"):
-                gas_news.topic_dialog(row["topic"], row, gas_headlines(), news_archive(),
-                                      lambda rows: headline_rows(rows, history=False))
+    cn.topic_cards(SPEC, data, heat, lambda topic, row: cn.topic_dialog(
+        SPEC, topic, row, gas_headlines(), news_archive(), lambda rows: headline_rows(rows, history=False)))
 
 
 def coming_up() -> None:
@@ -383,13 +276,13 @@ def headlines() -> None:
 
 with tab_news:
     try:
-        view = gas_news.pick_view()
+        view = cn.pick_view(SPEC)
         if view == "like":
-            gas_news.like_this_before(prices, data["sig"], gas_headlines(), news_archive())
+            cn.like_this_before(SPEC, prices, data["sig"], gas_headlines(), news_archive())
         elif view == "topics":
-            gas_news.topics_view(prices, data, news_archive())
+            cn.topics_view(SPEC, prices, data, news_archive())
         elif view == "search":
-            gas_news.search_view(prices, data["sig"], news_archive())
+            cn.search_view(SPEC, prices, data["sig"], news_archive())
         else:
             why_today()
             st.write("")

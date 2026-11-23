@@ -7,6 +7,7 @@ Pages:
   /       home.py   all the markets we cover, each with its live price
   /oil    oil.py    the oil site
   /gas    gas.py    the natural gas site
+  /gold   gold.py   the gold site
 
 To add a market: build its page, add it to sites.py (for the homepage card)
 and add an st.Page line below.
@@ -23,8 +24,9 @@ import credentials
 import daily_move
 import event_study
 import fetch_prices
-import gas_news
+import commodity_news
 import gas_review
+import gold_review
 import gas_storage
 import glossary
 import live_prices
@@ -49,7 +51,7 @@ st.set_page_config(page_title="Market Tracker · commodity news and market histo
 # every page starts from current code. (oil.py does the same for its own.)
 SHARED = [credentials, event_study, fetch_prices, live_prices, markets, mediacloud_news, news, news_feeds,
           daily_move, signals, ui, storylines, storylines_page, glossary, news_page, gas_storage, sites,
-          weather, recap, conditions, gas_news, gas_review, alerts]
+          weather, recap, conditions, commodity_news, gas_review, gold_review, alerts]
 
 
 @st.cache_resource
@@ -69,5 +71,6 @@ pages = [
     st.Page("home.py", title="All markets", icon=":material/home:", default=True),
     st.Page("oil.py", title="Oil", icon=":material/water_drop:", url_path="oil"),
     st.Page("gas.py", title="Natural gas", icon=":material/local_fire_department:", url_path="gas"),
+    st.Page("gold.py", title="Gold", icon=":material/diamond:", url_path="gold"),
 ]
 st.navigation(pages, position="hidden").run()

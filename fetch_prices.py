@@ -8,6 +8,11 @@ Sources:
     show publicly.
   - Alpaca for the energy-stock fund XLE (needs the Alpaca keys; skipped
     without them).
+  - Yahoo Finance for gold: the daily closes of GLD, the biggest gold fund
+    (it holds gold bars in a London vault). Unlike gold futures it never
+    switches contracts, so there are no fake jumps. Each GLD share held
+    0.1 ounce of gold at launch (Nov 2004), less a 0.40% yearly fee taken in
+    gold, so dividing by that gives the gold price per ounce (within ~1%).
 
 Run it with:   python fetch_prices.py
 Safe to run again any time - it refreshes the data with the latest prices.
@@ -31,7 +36,13 @@ SERIES = {
     "HEATING_OIL": "DHOILNYH",    # NY Harbor heating oil (diesel's close cousin), from 1986
     "NATGAS": "DHHNGSP",          # Henry Hub natural gas, $/MMBtu, from 1997
     "DOLLAR": "DTWEXBGS",         # Broad U.S. dollar index, from 2006
+    # Not a price: the 10-year "real" interest rate (Treasury yield minus
+    # expected inflation, from inflation-protected bonds), in %, from 2003.
+    # Gold pays no interest, so it usually struggles when this rises.
+    "REAL_YIELD": "DFII10",
 }
+GOLD_FUND = "GLD"
+GOLD_LAUNCH, GOLD_FEE = pd.Timestamp("2004-11-18"), 0.004   # 0.1 oz a share at launch
 ALPACA_SERIES = {"XLE": "XLE"}   # Energy Select Sector fund (big U.S. oil & gas stocks)
 
 FRED_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={code}"
@@ -77,6 +88,33 @@ def download_alpaca(name: str, symbol: str) -> pd.DataFrame:
     return pd.DataFrame({"series": name, "date": days, "price": bars["close"]})
 
 
+def download_gold(name: str, symbol: str = GOLD_FUND) -> pd.DataFrame:
+    """Gold in $ per ounce, every trading day since Nov 2004, from GLD's closes
+    (Yahoo Finance). If Yahoo doesn't answer, GLD from Alpaca instead (only
+    from 2016, but better than nothing on a fresh server)."""
+    print(f"Downloading {name} ({symbol}, Yahoo Finance)...")
+    try:
+        response = requests.get(f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}",
+                                params={"period1": 0, "period2": 4_000_000_000, "interval": "1d"},
+                                headers={"User-Agent": "Mozilla/5.0"}, timeout=60)
+        response.raise_for_status()
+        result = response.json()["chart"]["result"][0]
+        days = (pd.to_datetime(result["timestamp"], unit="s", utc=True)
+                .tz_convert("America/New_York").tz_localize(None).normalize())
+        closes = pd.Series(result["indicators"]["quote"][0]["close"], index=days, dtype=float).dropna()
+        if len(closes) < 4000:
+            raise ValueError(f"only {len(closes)} days returned")
+    except Exception as error:
+        print(f"  Yahoo unavailable ({error!r}); using Alpaca's GLD prices from 2016")
+        fund = download_alpaca(name, symbol)
+        closes = pd.Series(fund["price"].values, index=pd.to_datetime(fund["date"]), dtype=float)
+    closes = closes[~closes.index.duplicated(keep="last")]
+    years = (closes.index - GOLD_LAUNCH).days / 365.25
+    ounces = 0.1 * (1 - GOLD_FEE) ** years          # gold behind one share that day
+    return pd.DataFrame({"series": name, "date": closes.index.strftime("%Y-%m-%d"),
+                         "price": (closes / ounces).round(2).values})
+
+
 def saved_prices() -> pd.DataFrame:
     if not DB_PATH.exists():
         return pd.DataFrame(columns=["series", "date", "price"])
@@ -98,6 +136,7 @@ def save_to_database(table: pd.DataFrame) -> None:
 def main() -> None:
     jobs = [(download_series, name, code) for name, code in SERIES.items()]
     jobs += [(download_alpaca, name, symbol) for name, symbol in ALPACA_SERIES.items()]
+    jobs.append((download_gold, "GOLD", GOLD_FUND))
 
     def run(job):
         func, name, code = job

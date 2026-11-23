@@ -28,4 +28,17 @@ SITES = [
         "features": ["Live Henry Hub price", "Weather outlook", "Weekly storage reports", "News spikes & storylines",
                      "Market conditions", "Spike alerts"],
     },
+    {
+        "key": "gold",
+        "name": "Gold",
+        "page": "gold.py",
+        "live": "GOLD",
+        "price_label": "Gold",
+        "unit": "an ounce",
+        "color": "#b8860b",
+        "blurb": "The Fed, real interest rates, safe-haven rushes and central bank buying: the news "
+                 "that moves gold, and how the price reacted before.",
+        "features": ["Live gold price", "Gold vs real interest rates", "Fed decisions since 2004",
+                     "News spikes", "Market conditions", "Spike alerts"],
+    },
 ]

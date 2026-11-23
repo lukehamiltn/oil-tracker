@@ -31,6 +31,7 @@ import credentials
 
 PATH = Path(__file__).parent / "news_data" / "mc_timelines.csv"
 GAS_PATH = Path(__file__).parent / "news_data" / "mc_gas_timelines.csv"   # natural gas topics
+GOLD_PATH = Path(__file__).parent / "news_data" / "mc_gold_timelines.csv"  # gold topics
 HISTORY_START = dt.date(2015, 1, 1)
 # "Global English Language Sources" (about 1,600 sites) + "United States - National"
 COLLECTIONS = [9272347, 34412234]
@@ -211,5 +212,7 @@ if __name__ == "__main__":
         sys.exit(0 if update() else 1)
     if command == "update-gas":          # the natural gas topics
         sys.exit(0 if update(GAS_PATH, news.GAS_TOPICS) else 1)
+    if command == "update-gold":         # the gold topics
+        sys.exit(0 if update(GOLD_PATH, news.GOLD_TOPICS) else 1)
     if command == "stories":
         sys.exit(0 if update_stories() else 1)

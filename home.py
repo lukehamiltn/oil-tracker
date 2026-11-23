@@ -60,7 +60,7 @@ for col, site in zip(cols, sites.SITES):
             three = ((closes.iloc[-1] / closes.iloc[0] - 1) * 100) if len(closes) > 1 else None
             st.markdown(
                 f"<div class='kpi-label'>{site['price_label']}</div>"
-                f"<div class='market-price'>${q['price']:.2f} <span class='market-unit'>{site['unit']}</span></div>"
+                f"<div class='market-price'>${q['price']:,.2f} <span class='market-unit'>{site['unit']}</span></div>"
                 f"<div class='kpi-note' style='color:{tone}'>{arrow} {change:+.1f}% today"
                 + (f"<span style='color:#898781'> · {three:+.0f}% over 3 months</span>" if three is not None else "")
                 + "</div>", unsafe_allow_html=True)
@@ -76,7 +76,7 @@ for col, site in zip(cols, sites.SITES):
 
 with cols[-1].container(border=True, key="market_soon"):
     st.markdown("<div class='market-name' style='color:#898781'>More markets</div>"
-                "<div class='market-blurb'>Gold, wheat and copper are next on the list: each with its own "
+                "<div class='market-blurb'>Wheat and copper are next on the list: each with its own "
                 "news topics, scheduled reports and history of how prices reacted.</div>"
                 "<span class='market-chip'>Coming soon</span>", unsafe_allow_html=True)
 

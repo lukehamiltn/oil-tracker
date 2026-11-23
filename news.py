@@ -140,9 +140,57 @@ GAS_TOPICS = {
 }
 
 
+# Gold topics (the gold page); keys start with "gold_".
+GOLD_TOPICS = {
+    "gold_fed": {
+        "label": "Fed & interest rates",
+        "query": '(gold OR bullion) ("Federal Reserve" OR "Fed chair" OR "rate cut" OR "rate cuts" OR '
+                 '"rate hike" OR "rate hikes" OR "interest rates")',
+        "keywords": r"\bfed\b|federal reserve|powell|warsh|rate cut|rate hike|interest rate|fomc|yields?\b",
+        "color": "#2a78d6",
+    },
+    "gold_inflation": {
+        "label": "Inflation worries",
+        "query": '(gold OR bullion) (inflation OR "consumer prices" OR CPI OR stagflation)',
+        "keywords": r"inflation|\bcpi\b|consumer prices|stagflation",
+        "color": "#eb6834",
+    },
+    "gold_haven": {
+        "label": "Safe-haven rush (wars & crises)",
+        "query": '(gold OR bullion) ("safe haven" OR "safe-haven" OR "flight to safety")',
+        "keywords": r"safe.haven|flight to safety|\bwar\b|crisis|turmoil|geopolitic|tariff",
+        "color": "#e87ba4",
+    },
+    "gold_central_banks": {
+        "label": "Central banks buying gold",
+        "query": '("central bank" OR "central banks" OR "People\'s Bank of China" OR PBOC) '
+                 '("gold reserves" OR "gold buying" OR "gold purchases" OR "bought gold" OR "buying gold")',
+        "keywords": r"central banks?.{0,40}gold|gold.{0,40}central banks?|gold reserves|\bpboc\b",
+        "color": "#1baf7a",
+    },
+    "gold_asia": {
+        "label": "India & China demand",
+        "query": 'gold (India OR China OR Chinese OR Indian) (demand OR imports OR jewellery OR jewelry)',
+        "keywords": r"india|china|chinese|jewel|diwali|akshaya|shanghai gold",
+        "color": "#6250d6",
+    },
+}
+
+
 def topic_info(key: str) -> dict:
-    """A topic's settings, oil or gas."""
-    return TOPICS.get(key) or GAS_TOPICS.get(key) or {}
+    """A topic's settings, oil, gas or gold."""
+    return TOPICS.get(key) or GAS_TOPICS.get(key) or GOLD_TOPICS.get(key) or {}
+
+
+def classify_gold(title: str) -> list[str]:
+    title = title.lower()
+    return [key for key, t in GOLD_TOPICS.items() if re.search(t["keywords"], title)]
+
+
+def classify_in(topics: dict, title: str) -> list[str]:
+    """The topics (of a market's topic list) a headline is about."""
+    title = str(title).lower()
+    return [key for key, t in topics.items() if re.search(t["keywords"], title)]
 
 
 def classify_gas(title: str) -> list[str]:

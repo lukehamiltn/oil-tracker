@@ -51,6 +51,12 @@ jobs:
         env:
           MEDIACLOUD_API_KEY: ${{ secrets.MEDIACLOUD_API_KEY }}
         run: python -u mediacloud_news.py update-gas
+      - name: Update gold news coverage (Media Cloud)
+        continue-on-error: true
+        timeout-minutes: 8
+        env:
+          MEDIACLOUD_API_KEY: ${{ secrets.MEDIACLOUD_API_KEY }}
+        run: python -u mediacloud_news.py update-gold
       - name: Update storyline coverage (Media Cloud)
         continue-on-error: true
         timeout-minutes: 8
@@ -81,6 +87,12 @@ jobs:
           ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
           ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
         run: python -u market_news.py update
+      - name: Refresh gold market news
+        continue-on-error: true
+        env:
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+        run: python -u market_news.py update-gold
       - name: Save the updated files
         if: always()
         run: |

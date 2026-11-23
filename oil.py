@@ -140,7 +140,7 @@ def get_data():
         "prices": prices,
         "markets": markets,
         "typical": mk.typical_moves(markets),
-        "sig": mk.Significance(markets),      # "is this real?" checks
+        "sig": mk.Significance(markets, center="both"),   # "is this real?" checks (markets.py)
         "react": react,
         "events": events,                     # every event, incl. ones too recent to measure
         # Brent results, used throughout the site

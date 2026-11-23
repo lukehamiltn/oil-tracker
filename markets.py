@@ -26,11 +26,13 @@ MARKETS = {
     "NATGAS": ("Natural gas", "Natural gas", "#1baf7a"),
     "XLE": ("Energy stocks (XLE fund)", "Energy stocks", "#6250d6"),
     "DOLLAR": ("U.S. dollar index", "Dollar", "#898781"),
+    "GOLD": ("Gold", "Gold", "#b8860b"),
 }
 NOTES = {
     "XLE": "Energy stocks: data from 2016.",
     "DOLLAR": "Dollar: data from 2006.",
     "NATGAS": "Natural gas: data from 1997.",
+    "GOLD": "Gold: data from late 2004.",
 }
 
 
@@ -71,7 +73,12 @@ class Significance:
 
     center="median" judges the TYPICAL (median) move instead of the average,
     for markets with rare huge spikes (natural gas spot prices), where one
-    wild week can make an average look like a pattern."""
+    wild week can make an average look like a pattern.
+
+    center="both" (the oil site) shows averages but only calls something a
+    pattern when the typical move agrees: the p-value is the larger of the
+    two checks, so a "pattern" made by a few crash days (2008, 2020) is
+    marked as possible luck."""
 
     SIMS = 4000
 
@@ -94,17 +101,25 @@ class Significance:
         moves = self.moves.get((market, horizon))
         if moves is None or n == 0:
             return float("nan")
-        middle = np.median if self.center == "median" else np.mean
+        if self.center == "both":
+            return max(self._p(moves, market, horizon, values, "mean"),
+                       self._p(moves, market, horizon, values, "median"))
+        return self._p(moves, market, horizon, values, self.center)
+
+    def _p(self, moves, market: str, horizon: int, values, center: str) -> float:
+        n = len(values)
+        middle = np.median if center == "median" else np.mean
         normal = middle(moves)
         gap = abs(middle(values) - normal)
-        if n > 100 and self.center == "mean":         # bell-curve shortcut
+        if n > 100 and center == "mean":              # bell-curve shortcut
             z = gap / (moves.std() / math.sqrt(n))
             return math.erfc(z / math.sqrt(2))
-        if (market, horizon, n) not in self._null:
+        cache = (market, horizon, n, center)
+        if cache not in self._null:
             sims = self.SIMS if n <= 300 else 1000    # (keeps big draws quick)
             picks = self._rng.integers(0, len(moves), size=(sims, n))
-            self._null[market, horizon, n] = np.abs(middle(moves[picks], axis=1) - normal)
-        return float((self._null[market, horizon, n] >= gap).mean())
+            self._null[cache] = np.abs(middle(moves[picks], axis=1) - normal)
+        return float((self._null[cache] >= gap).mean())
 
     @staticmethod
     def verdict(p: float, n: int) -> str:

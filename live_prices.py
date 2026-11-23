@@ -25,12 +25,13 @@ import requests
 QUOTE_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
 SYMBOLS = {"BRENT": "BZ=F", "WTI": "CL=F",      # front-month futures
            "GASOLINE": "RB=F", "HEATING_OIL": "HO=F", "NATGAS": "NG=F",
-           "XLE": "XLE", "DOLLAR": "DX-Y.NYB"}  # (dollar: the ICE U.S. dollar index)
+           "XLE": "XLE", "DOLLAR": "DX-Y.NYB",  # (dollar: the ICE U.S. dollar index)
+           "GOLD": "GC=F"}                         # COMEX gold, $ per ounce
 MARKET_TZ = "America/New_York"
 
 SAVED_PATH = Path(__file__).parent / "news_data" / "futures_closes.csv"
 # Funds that hold the same futures, for estimates when Yahoo is down
-PROXIES = {"BRENT": "BNO", "WTI": "USO", "GASOLINE": "UGA", "NATGAS": "UNG"}
+PROXIES = {"BRENT": "BNO", "WTI": "USO", "GASOLINE": "UGA", "NATGAS": "UNG", "GOLD": "GLD"}
 ALPACA_DATA = "https://data.alpaca.markets/v2/stocks/{symbol}/{what}"
 
 # Several parts of the page ask for the same prices; keep each answer for a
@@ -60,7 +61,9 @@ def _remember(key, make):
 # contract to the next each month: on Nov 20, 2026 gas "rose 14.7%" only
 # because NG=F switched from the December to the January contract. So daily
 # changes and recent charts use the one contract it's tracking right now.
-CONTRACT_ROOTS = {"BRENT": "BZ", "WTI": "CL", "NATGAS": "NG", "GASOLINE": "RB", "HEATING_OIL": "HO"}
+CONTRACT_ROOTS = {"BRENT": "BZ", "WTI": "CL", "NATGAS": "NG", "GASOLINE": "RB", "HEATING_OIL": "HO",
+                  "GOLD": "GC"}
+EXCHANGES = {"GC": "CMX"}           # gold trades on COMEX; the rest on NYMEX
 _MONTH_CODES = "FGHJKMNQUVXZ"
 
 
@@ -84,7 +87,8 @@ def front_contract(market: str, timeout: float = 6) -> str:
             first = pd.Timestamp.now(tz=MARKET_TZ).tz_localize(None).normalize().replace(day=1)
             for i in range(5):
                 month = first + pd.DateOffset(months=i)
-                symbol = f"{root}{_MONTH_CODES[month.month - 1]}{month.year % 100:02d}.NYM"
+                symbol = (f"{root}{_MONTH_CODES[month.month - 1]}{month.year % 100:02d}."
+                          f"{EXCHANGES.get(root, 'NYM')}")
                 try:
                     other = float(_chart(symbol, "5d", timeout)["meta"]["regularMarketPrice"])
                 except Exception:

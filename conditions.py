@@ -12,7 +12,8 @@ Two views:
 This is description, not a trading rule: the bucket edges use the whole
 history, and neighbouring days overlap, so treat the numbers as context.
 
-The gas page uses the same views with its own indicators (GAS, gas_table).
+The gas and gold pages use the same views with their own indicators (GAS,
+gas_table; GOLD, gold_table).
 """
 
 import numpy as np
@@ -79,6 +80,31 @@ GAS = {
 }
 
 
+GOLD_INDICATORS = {
+    "trend_gap_pct": ("Gold vs its 200-day average", "%+.1f%%",
+                      "Above = uptrend; far above can mean stretched."),
+    "momentum_3m_pct": ("Gold change over 3 months", "%+.1f%%",
+                        "Recent direction and strength of the move."),
+    "volatility_1m_pct": ("Volatility (last month, yearly rate)", "%.0f%%",
+                          "How violently prices are swinging. Gold is usually calmer than oil."),
+    "real_yield": ("10-year real interest rate", "%.2f%%",
+                   "Interest after inflation, on inflation-protected Treasuries. Gold pays none, so high real "
+                   "rates have usually weighed on it."),
+    "real_yield_3m": ("Real rate change over 3 months", "%+.2f pts",
+                      "Rising real rates have usually been bad for gold; falling ones good."),
+    "dollar_vs_50d_pct": ("Dollar vs its 50-day average", "%+.1f%%",
+                          "Gold is priced in dollars: a weaker dollar has tended to help it."),
+}
+GOLD = {
+    "key": "gold_cond", "name": "Gold", "market": "the gold market", "indicators": GOLD_INDICATORS,
+    "short": {"trend_gap_pct": "vs 200-day", "momentum_3m_pct": "3-month change", "volatility_1m_pct": "Volatility",
+              "real_yield": "Real rate", "real_yield_3m": "Real rate, 3-mo change",
+              "dollar_vs_50d_pct": "Dollar vs 50-day"},
+    "recent_tip": "the price readings use gold futures, scaled to meet the GLD-based price on the last official "
+                  "day. The real interest rate and the dollar come from the Federal Reserve (FRED).",
+}
+
+
 def _price_columns(t: pd.DataFrame, price: pd.Series) -> None:
     t["trend_gap_pct"] = (price / price.rolling(200).mean() - 1) * 100
     t["momentum_3m_pct"] = (price / price.shift(63) - 1) * 100
@@ -97,6 +123,24 @@ def gas_table(prices: pd.Series, storage_vs_5yr: pd.Series) -> pd.DataFrame:
     t["storage_vs_5yr_pct"] = storage_vs_5yr.reindex(t.index.union(storage_vs_5yr.index)).ffill().reindex(t.index)
     t = t[list(GAS_INDICATORS) + ["next_month_pct"]]
     return t.dropna(subset=list(GAS_INDICATORS))
+
+
+def gold_table(prices: pd.Series, real_yield: pd.Series, dollar: pd.Series) -> pd.DataFrame:
+    """Gold indicators for every trading day, plus gold's change over the NEXT
+    month. The real rate and the dollar are carried forward to each gold day
+    (they are published a day or more later)."""
+    price = prices.dropna()
+    t = pd.DataFrame(index=price.index)
+    _price_columns(t, price)
+
+    def on_gold_days(series: pd.Series) -> pd.Series:
+        return series.reindex(t.index.union(series.index)).ffill().reindex(t.index)
+    t["real_yield"] = on_gold_days(real_yield)
+    t["real_yield_3m"] = t["real_yield"] - t["real_yield"].shift(63)
+    usd = on_gold_days(dollar)
+    t["dollar_vs_50d_pct"] = (usd / usd.rolling(50).mean() - 1) * 100
+    t = t[list(GOLD_INDICATORS) + ["next_month_pct"]]
+    return t.dropna(subset=list(GOLD_INDICATORS))
 
 
 def build_table(features: pd.DataFrame) -> pd.DataFrame:

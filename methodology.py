@@ -142,6 +142,12 @@ count how often their average move is as far from normal as the events' average 
 | **Could be noise** | Random days do this often, so the average may be luck |
 | **Too few events** | Fewer than {mk.MIN_EVENTS} cases, so we don't judge |
 
+A second check guards against a few extreme days: the same test is run on the
+*typical* (median) move, and a pattern has to pass both. (A handful of crash-era
+events, such as the Fed's emergency cuts in 2008 and 2020, can drag an average a
+long way while the typical event did little.) The natural gas site judges typical
+moves only, because spot gas has rare huge spikes on very cold days.
+
 We tested the check itself on random dates: it called them "strong" 1.5% of the time,
 close to the 2% you would expect.
 

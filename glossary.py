@@ -162,6 +162,41 @@ GAS_TERMS = {
 }
 
 
+# The gold page's words
+GOLD_TERMS = {
+    "Prices and units": [
+        ("Troy ounce", "The unit gold is priced in: about 31.1 grams (a little heavier than an ordinary ounce)."),
+        ("Spot price", "The price for gold delivered now. The site's history is worked out from GLD, a fund that "
+                       "holds gold bars, so it moves with the spot price."),
+        ("Gold futures (COMEX)", "Agreements today on the price of gold delivered in a future month, traded in New "
+                                 "York. The live price at the top of the page is the most-traded contract."),
+        ("Bullion", "Gold in bulk form: bars and coins valued for their metal, not as jewellery."),
+        ("Gold ETF", "A fund traded like a stock that holds physical gold (GLD, IAU). Money flowing into these "
+                     "funds is one way to see investor demand."),
+    ],
+    "What moves gold": [
+        ("Real interest rate", "The interest rate minus expected inflation (here: the 10-year rate on "
+                               "inflation-protected Treasury bonds). Gold pays nothing, so when real rates rise, "
+                               "holding gold costs more in lost interest, and it has usually struggled."),
+        ("Safe haven", "Something investors buy when they're scared (wars, bank failures, market crashes). "
+                       "Gold, Treasury bonds and the Swiss franc are the classic ones."),
+        ("The dollar", "Gold is priced in dollars, so a weaker dollar makes it cheaper for everyone else and has "
+                       "tended to push the dollar price up."),
+        ("Central bank buying", "Central banks (China, Poland, Turkey, India...) hold gold in their reserves. "
+                                "Since 2022 they have bought at a record pace, partly to rely less on the dollar."),
+        ("De-dollarization", "Countries moving their savings and trade away from the U.S. dollar, for example "
+                             "after Russia's dollar reserves were frozen in 2022."),
+        ("Inflation hedge", "Something that keeps its value when prices rise. Gold is often called one, but over "
+                            "periods of a few years the link is loose."),
+        ("Fed (FOMC)", "The U.S. Federal Reserve's rate-setting committee. It meets eight times a year; cuts "
+                       "usually help gold, hikes usually hurt it."),
+        ("India & China demand", "The two biggest buyers of gold jewellery and bars. Demand peaks around festivals "
+                                 "and weddings (Diwali, Akshaya Tritiya, Chinese New Year)."),
+    ],
+    "Words used on this site": TERMS["Words used on this site"],
+}
+
+
 def _show(terms: dict, intro: str, key: str) -> None:
     st.caption(intro)
     query = st.text_input("Find a word", placeholder="Search, e.g. contango",
@@ -184,6 +219,11 @@ def _show(terms: dict, intro: str, key: str) -> None:
 @st.dialog("Terminology", width="large")
 def show() -> None:
     _show(TERMS, "The words the oil market uses, in plain English.", "glossary_search")
+
+
+@st.dialog("Terminology", width="large")
+def show_gold() -> None:
+    _show(GOLD_TERMS, "The words the gold market uses, in plain English.", "gold_glossary_search")
 
 
 @st.dialog("Terminology", width="large")

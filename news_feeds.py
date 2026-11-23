@@ -42,6 +42,11 @@ FEEDS = [
     ("U.S. EIA", "https://www.eia.gov/rss/press_rss.xml", True),
     ("Offshore Energy", "https://www.offshore-energy.biz/feed/", True),
     ("Kpler", "https://www.kpler.com/blog/rss.xml", True),
+    # Gold & mining (their stories are saved when they are about gold)
+    ("Investing.com", "https://www.investing.com/rss/commodities_Metals.rss", True),
+    ("The Northern Miner", "https://www.northernminer.com/feed/", True),
+    ("Mining.com", "https://www.mining.com/feed/", True),
+    ("FXStreet", "https://www.fxstreet.com/rss/news", False),
     # Shipping
     ("gCaptain", "https://gcaptain.com/feed/", True),
     ("Splash247", "https://splash247.com/feed/", True),
@@ -77,6 +82,9 @@ OIL_TERMS = re.compile(
     r"\boil\b|\bcrude\b|\bopec|\bbrent\b|\bwti\b|barrels?\b|gasoline|\bpetrol\b|diesel|"
     r"refiner|pipeline|tanker|\blng\b|natural gas|fuel prices|hormuz|red sea|houthi|"
     r"bab.el.mandeb|aramco|petroleum|energy prices|oilfield|shale", re.IGNORECASE)
+
+# ...or, for the gold page, one of these
+GOLD_TERMS = re.compile(r"\bgold\b|bullion|precious metals?", re.IGNORECASE)
 
 ATOM = "{http://www.w3.org/2005/Atom}"
 RSS1 = "{http://purl.org/rss/1.0/}"
@@ -138,10 +146,11 @@ def read_feed(source: str, url: str, timeout: float = 8) -> list[dict]:
     return rows
 
 
-def fetch(feeds=FEEDS, timeout: float = 8, oil_only: bool = True) -> pd.DataFrame:
+def fetch(feeds=FEEDS, timeout: float = 8, oil_only: bool = True, terms=None) -> pd.DataFrame:
     """The latest articles from every feed (feeds that fail are skipped).
     oil_only: keep just the stories about oil (False = everything, which is
-    used to find coverage of newswire flashes about e.g. Iran or the Fed)."""
+    used to find coverage of newswire flashes about e.g. Iran or the Fed).
+    terms: keep the stories matching this pattern instead (e.g. GOLD_TERMS)."""
     def one(feed):
         source, url, specialist = feed
         try:
@@ -163,7 +172,9 @@ def fetch(feeds=FEEDS, timeout: float = 8, oil_only: bool = True) -> pd.DataFram
     # Every story must actually be about oil: mention it, or fuel, refineries,
     # tankers, Hormuz... (a topic tag alone isn't enough: "Middle East
     # conflict" would let in every story about the region)
-    if oil_only:
+    if terms is not None:
+        t = t[text.str.contains(terms)]
+    elif oil_only:
         t = t[text.str.contains(OIL_TERMS)]
     t = t.sort_values("time", ascending=False)
     t = t.drop_duplicates("url").drop_duplicates("headline")
@@ -178,8 +189,9 @@ def _month_file(month: pd.Period) -> Path:
 
 
 def update() -> None:
-    """Add any new articles to this month's (and last month's) archive file."""
-    fresh = fetch()
+    """Add any new articles to this month's (and last month's) archive file:
+    the ones about oil or gas, and the ones about gold (for the gold page)."""
+    fresh = fetch(terms=re.compile(f"{OIL_TERMS.pattern}|{GOLD_TERMS.pattern}", re.IGNORECASE))
     if fresh.empty:
         print("No articles fetched.")
         return
@@ -198,13 +210,15 @@ def update() -> None:
     print(f"Added {added} new articles to {ARCHIVE_DIR}")
 
 
-def load_archive() -> pd.DataFrame:
+def load_archive(terms=OIL_TERMS) -> pd.DataFrame:
+    """The saved articles about oil (or, with terms=GOLD_TERMS, about gold)."""
     files = sorted(ARCHIVE_DIR.glob("*.csv"))
     if not files:
         return pd.DataFrame(columns=COLUMNS)
     t = pd.concat([pd.read_csv(f) for f in files], ignore_index=True)
     t["time"] = pd.to_datetime(t["time"], utc=True)
     t["summary"] = t["summary"].fillna("")
+    t = t[(t["headline"].fillna("") + " " + t["summary"]).str.contains(terms)]
     t["topics"] = t["topics"].fillna("").map(lambda s: [k for k in s.split("|") if k])
     return t.sort_values("time", ascending=False).reset_index(drop=True)
 

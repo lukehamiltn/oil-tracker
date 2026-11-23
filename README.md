@@ -5,6 +5,7 @@ did next. Plus: event studies (EIA, OPEC+, Fed), backtested trading rules,
 today's market conditions vs history, and two paper-trading bots on live prices.
 
 **Live site: https://oil-tracker-q7rqjuftmvvqnrgbkzwjcd.streamlit.app/**
+(markets: oil, `/gas` natural gas, `/gold` gold)
 
 ## Goal
 
@@ -24,8 +25,13 @@ All free; government data unless noted.
   companies since 2015 (saved in `news_data/market_news/`, one file per month,
   refreshed every 3 hours). Powers the live headlines and the instant search
 - **Prices:** Brent and WTI crude, NY Harbor gasoline and heating oil, Henry Hub
-  natural gas (EIA, via FRED), the broad dollar index (FRED) and the XLE
-  energy-stock fund (Alpaca). Every event is measured in all of them (`markets.py`)
+  natural gas (EIA, via FRED), the broad dollar index (FRED), the XLE
+  energy-stock fund (Alpaca) and gold (from the GLD gold fund's closes, Yahoo
+  Finance). Every event is measured in all of them (`markets.py`)
+- **Gold:** the 10-year real interest rate (FRED `DFII10`), gold news topics
+  from Media Cloud (`news_data/mc_gold_timelines.csv`) and a gold newswire
+  archive (`news_data/gold_news/`, from mid-2026: Alpaca keeps only a few
+  months of news)
 - **Inventories:** EIA weekly U.S. crude stocks (public spreadsheet, no API key)
 - **OPEC+ decisions:** hand-verified list in `events/opec_decisions.csv`
 - **Fed rate decisions:** Fed target rate (FRED `DFEDTAR` / `DFEDTARU`)
@@ -50,6 +56,8 @@ python -m venv .venv
 .venv\Scripts\python.exe fed_events.py          # Fed rate changes
 .venv\Scripts\python.exe news.py update         # news coverage history (slow: GDELT rate limits)
 .venv\Scripts\python.exe market_news.py update  # market news archive (fast)
+.venv\Scripts\python.exe market_news.py update-gold     # gold news archive
+.venv\Scripts\python.exe mediacloud_news.py update-gold # gold news coverage (needs the key)
 .venv\Scripts\python.exe market_news.py latest  # latest tagged oil headlines
 
 # analysis

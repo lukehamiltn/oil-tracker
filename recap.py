@@ -168,7 +168,7 @@ def build_data() -> dict:
     events = {"opec": es.load_events(), "inventory": inv.build_events(inv.load_inventories()),
               "fed": fed.build_events(fed.load_fed()),
               "news": mn.add_headlines(news.all_spikes(timelines), archive, mn.topic_match)}
-    return {"events": events, "timelines": timelines, "sig": mk.Significance(markets),
+    return {"events": events, "timelines": timelines, "sig": mk.Significance(markets, center="both"),
             "react": {k: mk.reactions(markets, e) for k, e in events.items()},
             "prices": es.load_prices()}
 
