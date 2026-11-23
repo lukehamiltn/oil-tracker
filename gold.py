@@ -51,7 +51,7 @@ COLOR = SPEC.color
 
 # Data ---------------------------------------------------------------------------
 @st.cache_resource(ttl=6 * 60 * 60, show_spinner="Loading gold prices and history...")
-def get_data() -> dict:
+def gold_data() -> dict:
     # Prices: download if the saved copy is missing or more than a few days old
     try:
         prices = es.load_prices(MARKET)
@@ -73,18 +73,21 @@ def get_data() -> dict:
     return data
 
 
+# (Every page runs under the same name, so Streamlit's cache can't tell two
+# functions with identical code apart: gas.py's live_quote() would answer for
+# gold. Hence gold_... names, with the market passed in.)
 @st.cache_data(ttl=5 * 60, show_spinner=False)
-def live_quote():
-    return live_prices.quote(MARKET)
+def gold_quote(market: str = MARKET):
+    return live_prices.quote(market)
 
 
 @st.cache_data(ttl=30 * 60, show_spinner=False)
-def recent_closes(hour: str) -> pd.Series:
-    return live_prices.daily_closes(MARKET, span="6mo")
+def gold_closes(hour: str, market: str = MARKET) -> pd.Series:
+    return live_prices.daily_closes(market, span="6mo")
 
 
 @st.cache_data(ttl=30 * 60, show_spinner=False)
-def conditions_table(version: str) -> tuple[pd.DataFrame, pd.Series, int]:
+def gold_conditions(version: str) -> tuple[pd.DataFrame, pd.Series, int]:
     """Market conditions for every day up to today: the GLD-based prices
     carried up to today with futures."""
     extended, added = live_prices.extend(prices, MARKET)
@@ -92,16 +95,16 @@ def conditions_table(version: str) -> tuple[pd.DataFrame, pd.Series, int]:
 
 
 @st.cache_data(ttl=3 * 60 * 60, show_spinner=False)
-def news_archive() -> pd.DataFrame:
+def gold_archive() -> pd.DataFrame:
     """Gold stories from the market newswire (collected since mid-2026)."""
     return mn.load_gold_archive()
 
 
 def gold_headlines() -> pd.DataFrame:
-    return cn.live_headlines(SPEC.key, news_archive())
+    return cn.live_headlines(SPEC.key, gold_archive())
 
 
-data = get_data()
+data = gold_data()
 prices = data["prices"]
 heat = news.current_heat(data["timelines"]) if not data["timelines"].empty else pd.DataFrame()
 
@@ -132,7 +135,7 @@ actions.link_button("Spike alerts", alerts.GOLD_SUBSCRIBE_URL, width="stretch",
                          "spiking, with what happened after past spikes, plus a Saturday week in review.")
 st.write("")
 
-q = live_quote()
+q = gold_quote()
 if q:
     change = q["change_pct"] or 0
     t = q["time"]
@@ -201,14 +204,14 @@ with tab_news:
     try:
         view = cn.pick_view(SPEC)
         if view == "topics":
-            cn.topics_view(SPEC, prices, data, news_archive())
+            cn.topics_view(SPEC, prices, data, gold_archive())
         elif view == "search":
-            cn.search_view(SPEC, prices, data["sig"], news_archive())
+            cn.search_view(SPEC, prices, data["sig"], gold_archive())
         else:
             cn.why_today(SPEC, q, prices, gold_headlines(), heat, headline_rows)
             st.write("")
             cn.topic_cards(SPEC, data, heat, lambda topic, row: cn.topic_dialog(
-                SPEC, topic, row, gold_headlines(), news_archive(), headline_rows))
+                SPEC, topic, row, gold_headlines(), gold_archive(), headline_rows))
             st.write("")
             coming_up()
             st.write("")
@@ -344,13 +347,13 @@ with tab_history:
 
 with tab_review:
     try:
-        gold_review.render(data, recent_closes(pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%d %H")))
+        gold_review.render(data, gold_closes(pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%d %H")))
     except Exception as error:
         st.error(f"This section hit a problem: {error}")
 
 with tab_cond:
     try:
-        table, extended, added = conditions_table(f"{prices.index[-1]}-{len(prices)}-{real.index[-1]}")
+        table, extended, added = gold_conditions(f"{prices.index[-1]}-{len(prices)}-{real.index[-1]}")
         conditions.show(table, extended, added, conditions.GOLD)
     except Exception as error:
         st.error(f"This section hit a problem: {error}")
