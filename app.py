@@ -31,7 +31,8 @@ st.set_page_config(page_title="Market Tracker · commodity news and market histo
 SHARED = ["credentials", "event_study", "fetch_prices", "live_prices", "markets", "news", "flash_sources",
           "market_news", "mediacloud_news", "news_feeds", "daily_move", "signals", "ui", "spike_details", "glossary",
           "storylines", "weather", "gas_storage", "sites", "fed_events", "recap", "conditions", "news_page",
-          "storylines_page", "commodity_news", "gas_review", "gold_review", "methodology", "alerts"]
+          "storylines_page", "commodity_news", "gas_review", "gold_review", "market_data", "strategies",
+          "backtest", "gold_lab", "methodology", "alerts"]
 
 
 @st.cache_resource

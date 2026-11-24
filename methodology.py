@@ -330,6 +330,14 @@ the Federal Reserve: what a safe bond pays after inflation.
 **Market conditions** compares today's readings (trend, momentum, volatility, the real rate and
 its 3-month change, and the dollar) with every past day, and finds the days most like today.
 
+**Popular gold rules, tested** (Research tab) turns five common beliefs about gold (buy in an
+uptrend, when real interest rates fall, when the dollar weakens, when hedge funds are bearish,
+when war or crisis hits the news) into rules that decide each day whether to own gold or sit in
+cash, and compares them with simply holding gold. They only use information public at the time
+(the real rate counts from two business days later, the dollar from a week later, hedge-fund
+positioning from the Monday after its Friday release), charge {bt.COST_PCT:.2f}% per trade, and
+were written down before any results were seen; 2017 onwards is the main test.
+
 **Spike alerts** check each gold topic every 3 hours and send a push notification (through
 the free ntfy app) when one starts spiking, plus a Saturday week in review.
 """)
@@ -344,6 +352,7 @@ def gold_sources() -> None:
 | 10-year real interest rate (TIPS) | Federal Reserve via FRED | 2003 |
 | U.S. dollar (broad index) | Federal Reserve via FRED | 2006 |
 | Fed target rate | Federal Reserve via FRED | 2004 |
+| Hedge-fund positioning (managed money, COMEX gold) | CFTC Commitments of Traders | 2006 |
 | Worldwide news coverage | Media Cloud | 2015 |
 | Gold market news | Benzinga via Alpaca, and publishers' news feeds | mid-2026 |
 """)

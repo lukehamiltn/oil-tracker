@@ -35,8 +35,10 @@ import fed_events as fed
 import fetch_prices
 import gas_storage as gs
 import glossary
+import gold_lab
 import gold_review
 import live_prices
+import market_data as md
 import market_news as mn
 import mediacloud_news
 import methodology
@@ -72,6 +74,17 @@ def gold_data() -> dict:
     data = gold_review.build(es.load_prices(MARKET), es.load_prices("REAL_YIELD"),
                              mediacloud_news.load(mediacloud_news.GOLD_PATH))
     data["dollar"] = es.load_prices("DOLLAR")
+    # "Popular gold rules, tested" (Research tab): its extra data, then every rule backtested
+    for job in (md.download_dollar, lambda: md.download_cot(md.GOLD_CODE, "cot_gold")):
+        try:
+            job()
+        except Exception as error:
+            print(f"Download failed, using saved data: {error}")
+    try:
+        features = gold_lab.build_features(data["prices"], data["real_yield"], data["timelines"])
+        data["lab"] = gold_lab.run_all(features)
+    except Exception as error:
+        print(f"Gold rules test unavailable: {error!r}")
     return data
 
 
@@ -168,8 +181,9 @@ st.caption(f"Live price: COMEX gold futures, about 10 minutes delayed. Charts us
            f"(latest {ui.day(prices.index[-1], year=False)}), worked out from the GLD gold fund.")
 st.write("")
 
-tab_news, tab_review, tab_fed, tab_history, tab_cond, tab_stories = st.tabs(
-    ["News", "Week in review", "Fed & interest rates", "Prices & history", "Market conditions", "Storylines"])
+tab_news, tab_review, tab_fed, tab_history, tab_cond, tab_stories, tab_research = st.tabs(
+    ["News", "Week in review", "Fed & interest rates", "Prices & history", "Market conditions", "Storylines",
+     "Research"])
 
 
 # News ---------------------------------------------------------------------------------
@@ -354,6 +368,15 @@ with tab_cond:
     try:
         table, extended, added = gold_conditions(f"{prices.index[-1]}-{len(prices)}-{real.index[-1]}")
         conditions.show(table, extended, added, conditions.GOLD)
+    except Exception as error:
+        st.error(f"This section hit a problem: {error}")
+
+with tab_research:
+    try:
+        if "lab" in data:
+            gold_lab.render(*data["lab"])
+        else:
+            st.info("This test couldn't load its data just now. Please try again later.")
     except Exception as error:
         st.error(f"This section hit a problem: {error}")
 
