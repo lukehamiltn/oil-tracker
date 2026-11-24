@@ -300,25 +300,11 @@ with tab_fed:
 # Prices & history ---------------------------------------------------------------------
 def history_section() -> None:
     st.subheader("Gold prices and gold news spikes", anchor=False)
-    fig = go.Figure(go.Scatter(x=prices.index, y=prices.values, mode="lines", name="Gold",
-                               line=dict(color=COLOR, width=1.4),
-                               hovertemplate="%{x|%b %-d, %Y}: $%{y:,.0f}<extra></extra>"))
-    spikes = data["spikes"]
-    if not spikes.empty:
-        for topic, group in spikes.groupby("topic"):
-            info = news.topic_info(topic)
-            on = prices.reindex(group["date"], method="nearest")
-            fig.add_trace(go.Scatter(x=on.index, y=on.values, mode="markers", name=info["label"],
-                                     marker=dict(color=info["color"], size=9, line=dict(color="white", width=1)),
-                                     hovertemplate=f"{info['label']}<br>%{{x|%b %-d, %Y}}<extra></extra>"))
-    ui.base_layout(fig, 480, hovermode="closest", yaxis_tickprefix="$", yaxis_title="$ per ounce",
-                   legend=dict(orientation="h", yanchor="top", y=-0.12, x=0, font=dict(size=12)))
-    fig.update_xaxes(range=[prices.index[-1] - pd.DateOffset(years=5), prices.index[-1] + pd.Timedelta(days=20)],
-                     rangeselector=ui.range_buttons([1, 5], "Since 2005", y=1.0))
-    st.plotly_chart(fig, width="stretch", config=ui.CHART_CONFIG, key="gold_history")
-    ui.tip("Dots mark days a gold news topic spiked to at least 3× its normal coverage (from 2015). Prices are "
-           "daily closes worked out from the GLD gold fund (it holds gold bars), in $ per ounce.",
-           "How to read this")
+    cn.price_spike_chart(SPEC, prices, data, gold_archive(), line_name="Gold", y_title="$ per ounce",
+                         hover_price="$%{y:,.0f}", since_label="Since 2005", key="gold_history")
+    ui.tip("Dots mark days a gold news topic spiked to at least 3× its normal coverage (from 2015). Click one "
+           "to see the biggest stories that day and what gold did next. Prices are daily closes worked out "
+           "from the GLD gold fund (it holds gold bars), in $ per ounce.", "How to read this")
 
     st.write("")
     st.markdown("**How gold usually moves in each month**")

@@ -26,6 +26,7 @@ import news
 import news_feeds as nf
 import live_prices
 import recap
+import spike_details
 import ui
 import upcoming
 
@@ -140,7 +141,10 @@ def status(heat: float, enough: bool = True, big_enough: bool = True) -> tuple[s
 
 
 def coverage_chart(t: pd.DataFrame, spikes: pd.DataFrame, color: str, key: str,
-                   source: str = "world") -> None:
+                   source: str = "world") -> str | None:
+    """Coverage over time with each news spike as a dot. Clicking a dot picks
+    it: returns the chosen spike's name, for spike_details.show()."""
+    chosen = spike_details.pick(key)
     c = news.coverage(t, source)
     share = c.set_index("date")["share_per_million"]
     if source == "market":       # share of the oil news archive, in %
@@ -153,16 +157,28 @@ def coverage_chart(t: pd.DataFrame, spikes: pd.DataFrame, color: str, key: str,
     fig.add_trace(go.Scatter(x=smooth.index, y=smooth.values, mode="lines",
                              name=f"Coverage ({window}-day average)",
                              line=dict(color=color, width=1.6),
-                             hovertemplate="%{x|%b %-d, %Y}: " + unit + "<extra></extra>"))
+                             # (only the dots can be hovered and clicked: with the line
+                             # hoverable too, clicks often landed on it instead)
+                             **(dict(hoverinfo="skip") if not spikes.empty else
+                                dict(hovertemplate="%{x|%b %-d, %Y}: " + unit + "<extra></extra>"))))
     if not spikes.empty:
         at = smooth.reindex(spikes["spike_day"]).values
+        category = "topic" if "topic" in spikes else None
+        names = (spike_details.ids(spikes, category) if category
+                 else [spike_details.spike_id("search", d) for d in spikes["spike_day"]])
         fig.add_trace(go.Scatter(
             x=spikes["spike_day"], y=at, mode="markers", name="News spike",
             marker=dict(size=9, color="#ffffff", line=dict(color="#1d1d1b", width=2)),
-            customdata=spikes[["description"]].values,
-            hovertemplate="<b>%{x|%b %-d, %Y}</b><br>%{customdata[0]}<extra></extra>"))
+            customdata=[[d, n] for d, n in zip(spikes["description"], names)],
+            hovertemplate="<b>%{x|%b %-d, %Y}</b><br>%{customdata[0]}"
+                          "<br><i>Click for that day's stories</i><extra></extra>",
+            unselected=dict(marker=dict(opacity=1))))     # clicking doesn't dim the rest
+        if chosen in names:
+            i = names.index(chosen)
+            spike_details.ring(fig, spikes["spike_day"].iloc[i], at[i])
     ui.base_layout(fig, 300, hovermode="closest", yaxis_title=title)
-    st.plotly_chart(fig, width="stretch", config=ui.CHART_CONFIG, key=key)
+    st.plotly_chart(fig, width="stretch", config=ui.CHART_CONFIG, key=key, **spike_details.CLICKABLE)
+    return chosen
 
 
 def _ago(time: pd.Timestamp) -> str:
@@ -901,7 +917,11 @@ def explore_topic(prices, data) -> None:
         ui.tip(f"`{news.TOPICS[topic]['query']}`", "Search used for worldwide news")
     else:
         ui.tip("Share of all saved oil-market news whose headline matches this topic.")
-    coverage_chart(t, spikes, COLORS[topic], key="news_cov", source=source)
+    chosen = coverage_chart(t, spikes, COLORS[topic], key="news_cov", source=source)
+    spike_details.show(spikes, chosen, market="oil", name=name, paths=paths, labels=LABELS,
+                       colors=COLORS, queries={k: v["query"] for k, v in news.TOPICS.items()},
+                       keywords={k: v["keywords"] for k, v in news.TOPICS.items()},
+                       archive=data["archive"], key="news_cov")
     st.markdown(f"**{name} after each of the {len(spikes)} news spikes**")
     ui.event_paths(spikes, paths, COLORS[topic], SPIKE_TABLE, key="news_topic_paths",
                    market=name)
@@ -934,7 +954,11 @@ def search_section(data, archive) -> None:
         return
     st.markdown(f"**{int(t['articles'].sum()):,} stories mention {html.escape(query)}**")
     spikes = results if not results.empty else pd.DataFrame(columns=["spike_day", "description"])
-    coverage_chart(t, spikes, "#2a78d6", key="news_search_cov", source="market")
+    chosen = coverage_chart(t, spikes, "#2a78d6", key="news_search_cov", source="market")
+    if not results.empty:
+        spike_details.show(results, chosen, market="oil", name="Brent", paths=paths,
+                           labels={"search": query}, colors={"search": "#2a78d6"},
+                           queries={"search": query}, archive=archive, key="news_search_cov")
     if results.empty:
         st.info("This theme never spiked sharply enough to count as a news event "
                 f"(needs {news.SPIKE_RATIO:.0f}× its normal coverage on a busy day).")

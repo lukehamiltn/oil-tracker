@@ -57,6 +57,15 @@ jobs:
         env:
           MEDIACLOUD_API_KEY: ${{ secrets.MEDIACLOUD_API_KEY }}
         run: python -u mediacloud_news.py update-gold
+      - name: Save the biggest stories on each news spike day (Media Cloud)
+        # Shown when a spike's dot is clicked on the site. Each spike takes
+        # about 30 seconds, so only new spikes (plus any backlog, 8 minutes'
+        # worth per run) are fetched; a spike is never fetched twice.
+        continue-on-error: true
+        timeout-minutes: 11
+        env:
+          MEDIACLOUD_API_KEY: ${{ secrets.MEDIACLOUD_API_KEY }}
+        run: python -u mediacloud_news.py spike-stories 8
       - name: Update storyline coverage (Media Cloud)
         continue-on-error: true
         timeout-minutes: 8

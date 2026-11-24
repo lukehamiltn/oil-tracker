@@ -29,7 +29,7 @@ st.set_page_config(page_title="Market Tracker · commodity news and market histo
 # of something it needs. Once one file is reloaded, every file after it is
 # too (they may hold on to parts of it). oil.py does the same for its own.
 SHARED = ["credentials", "event_study", "fetch_prices", "live_prices", "markets", "news", "flash_sources",
-          "market_news", "mediacloud_news", "news_feeds", "daily_move", "signals", "ui", "glossary",
+          "market_news", "mediacloud_news", "news_feeds", "daily_move", "signals", "ui", "spike_details", "glossary",
           "storylines", "weather", "gas_storage", "sites", "fed_events", "recap", "conditions", "news_page",
           "storylines_page", "commodity_news", "gas_review", "gold_review", "alerts"]
 

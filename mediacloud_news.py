@@ -9,8 +9,10 @@ Why Media Cloud instead of GDELT: history back to 2015 with every day present,
 steady daily totals, and our own API key (GDELT rate-limits everyone sharing
 GitHub's servers, and its collection dropped sharply in late 2026).
 
-Only counts are used and shown (Media Cloud's terms allow reusing counts and
-charts; story titles belong to the publishers).
+Mostly counts are used (Media Cloud's terms allow reusing counts and charts).
+Story headlines are shown only as links to the publishers' own pages: the
+latest stories behind a topic card (mc_stories.csv), and the biggest stories
+on each news spike day (mc_spike_stories.csv, shown when a dot is clicked).
 
 Run by .github/workflows/news.yml every 3 hours:
     python mediacloud_news.py update
@@ -153,6 +155,112 @@ def update_stories(path: Path = STORIES_PATH) -> bool:
     return all_ok
 
 
+SPIKE_STORIES_PATH = Path(__file__).parent / "news_data" / "mc_spike_stories.csv"
+SPIKE_COLUMNS = ["market", "topic", "spike_day", "rank", "headline", "url", "source", "copies", "on_topic"]
+SPIKE_TOP = 8              # stories saved per spike
+# Each market's topics and coverage file ("oil" is the oil site's news.TOPICS)
+MARKET_TOPICS = {"oil": (PATH, news.TOPICS), "gas": (GAS_PATH, news.GAS_TOPICS),
+                 "gold": (GOLD_PATH, news.GOLD_TOPICS)}
+
+
+def _patiently(call, tries: int = 3):
+    """Run one Media Cloud request, waiting and retrying if it says 'rate limited'."""
+    for attempt in range(tries):
+        try:
+            return call()
+        except Exception as error:
+            if attempt == tries - 1 or "429" not in str(error):
+                raise
+            time.sleep(WAIT_SECONDS * 2)
+
+
+def day_stories(search, query: str, day: dt.date, keywords: str | None = None,
+                top: int = SPIKE_TOP) -> pd.DataFrame:
+    """The biggest stories on one day for a search: copies of the same article
+    on many sites merged, ranked by how many sites ran it. Stories whose
+    headline is about the topic (`keywords`) come first, since Media Cloud
+    also counts pages that only mention it in passing. One request (about
+    30 seconds: Media Cloud is slow at listing stories)."""
+    rows, _ = _patiently(lambda: search.story_list(to_mediacloud(query), day, day,
+                                                   collection_ids=COLLECTIONS, page_size=200))
+    columns = ["headline", "url", "source", "copies", "on_topic"]
+    if not rows:
+        return pd.DataFrame(columns=columns)
+    t = pd.DataFrame(rows)
+    t["key"] = t["title"].map(_title_key)
+    t["copies"] = t.groupby("key")["key"].transform("size")
+    t = t.sort_values("publish_date").drop_duplicates("key")      # the first to publish it
+    t["on_topic"] = (t["title"].fillna("").str.lower().str.contains(keywords, regex=True)
+                     if keywords else True)
+    t = t.sort_values(["on_topic", "copies"], ascending=False).head(top)
+    return pd.DataFrame({"headline": t["title"], "url": t["url"], "source": t["media_name"],
+                         "copies": t["copies"], "on_topic": t["on_topic"]})[columns]
+
+
+def load_spike_stories(path: Path = SPIKE_STORIES_PATH) -> pd.DataFrame:
+    if not path.exists():
+        return pd.DataFrame(columns=SPIKE_COLUMNS)
+    return pd.read_csv(path, parse_dates=["spike_day"])
+
+
+def update_spike_stories(minutes: float = 10, path: Path = SPIKE_STORIES_PATH) -> bool:
+    """Save the biggest stories on each news spike day, for every market's
+    topics (shown when a spike's dot is clicked on the site). Newest spikes
+    first; a spike already saved is never fetched again. Stops after
+    `minutes` and carries on next run, since each spike takes ~30 seconds.
+    A spike with no stories is saved as one empty row so it isn't retried."""
+    import mediacloud.api as mc
+    key = api_key()
+    if not key:
+        print("No MEDIACLOUD_API_KEY set - skipping.")
+        return False
+    search = mc.SearchApi(key)
+    saved = load_spike_stories(path)
+    done = set(zip(saved["market"], saved["topic"],
+                   pd.to_datetime(saved["spike_day"]).dt.strftime("%Y-%m-%d")))
+    today = dt.datetime.now(dt.timezone.utc).date()
+    todo = []
+    for market, (timelines_path, topics) in MARKET_TOPICS.items():
+        timelines = load(timelines_path)
+        if timelines.empty:
+            continue
+        for _, s in news.all_spikes(timelines).iterrows():
+            day = s["spike_day"].date()
+            if day < today and (market, s["topic"], f"{day:%Y-%m-%d}") not in done:
+                todo.append((day, market, s["topic"], topics[s["topic"]]))
+    todo.sort(key=lambda item: item[0], reverse=True)
+    print(f"{len(todo)} spikes still to fetch")
+    stop_at, fresh, all_ok = time.time() + minutes * 60, [], True
+
+    def save() -> None:
+        if fresh:
+            path.parent.mkdir(exist_ok=True)
+            table = pd.concat([saved, *fresh], ignore_index=True)
+            table.sort_values(["market", "topic", "spike_day", "rank"]).to_csv(
+                path, index=False, date_format="%Y-%m-%d")
+
+    for i, (day, market, topic, info) in enumerate(todo):
+        if time.time() > stop_at:
+            print(f"Out of time; {len(todo) - i} spikes left for next run.")
+            break
+        try:
+            found = day_stories(search, info["query"], day, info.get("keywords"))
+        except Exception as error:
+            print(f"{market} {topic} {day}: skipped for now ({error!r})")
+            all_ok = False
+            time.sleep(WAIT_SECONDS)
+            continue
+        if found.empty:
+            found = pd.DataFrame([{"headline": "", "url": "", "source": "", "copies": 0, "on_topic": False}])
+        fresh.append(found.assign(market=market, topic=topic, spike_day=pd.Timestamp(day),
+                                  rank=range(1, len(found) + 1))[SPIKE_COLUMNS])
+        print(f"{market} {topic} {day}: {len(found)} stories")
+        if len(fresh) % 5 == 0:
+            save()
+    save()
+    return all_ok
+
+
 def load_stories(path: Path = STORIES_PATH) -> pd.DataFrame:
     if not path.exists():
         return pd.DataFrame(columns=["topic", "time", "headline", "url", "source", "copies"])
@@ -216,3 +324,6 @@ if __name__ == "__main__":
         sys.exit(0 if update(GOLD_PATH, news.GOLD_TOPICS) else 1)
     if command == "stories":
         sys.exit(0 if update_stories() else 1)
+    if command == "spike-stories":       # the biggest stories on each spike day
+        minutes = float(sys.argv[2]) if len(sys.argv) > 2 else 10
+        sys.exit(0 if update_spike_stories(minutes) else 1)

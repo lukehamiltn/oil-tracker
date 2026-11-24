@@ -447,25 +447,15 @@ with tab_history:
         st.error(f"This section hit a problem: {error}")
     st.write("")
     st.subheader("Henry Hub prices and gas news spikes", anchor=False)
-    since = prices[prices.index >= "2010-01-01"]
-    fig = go.Figure(go.Scatter(x=since.index, y=since.values, mode="lines", name="Henry Hub",
-                               line=dict(color="#0f766e", width=1.4),
-                               hovertemplate="%{x|%b %-d, %Y}: $%{y:.2f}<extra></extra>"))
-    spikes = data["spikes"]
-    if not spikes.empty:
-        for topic, group in spikes.groupby("topic"):
-            info = news.topic_info(topic)
-            on = since.reindex(group["date"], method="nearest")
-            fig.add_trace(go.Scatter(x=on.index, y=on.values, mode="markers", name=info["label"],
-                                     marker=dict(color=info["color"], size=9, line=dict(color="white", width=1)),
-                                     hovertemplate=f"{info['label']}<br>%{{x|%b %-d, %Y}}<extra></extra>"))
-    ui.base_layout(fig, 480, hovermode="closest", yaxis_tickprefix="$", yaxis_title="$ per MMBtu",
-                   legend=dict(orientation="h", yanchor="top", y=-0.12, x=0, font=dict(size=12)))
-    fig.update_xaxes(range=[since.index[-1] - pd.DateOffset(years=5), since.index[-1] + pd.Timedelta(days=20)],
-                     rangeselector=ui.range_buttons([1, 5], "Since 2010", y=1.0))
-    st.plotly_chart(fig, width="stretch", config=ui.CHART_CONFIG, key="gas_history")
-    ui.tip("Dots mark days a gas news topic spiked to at least 3× its normal coverage (from 2015). Gas is far "
-           "more volatile than oil: a 5% day is ordinary, especially in winter.", "How to read this")
+    try:
+        cn.price_spike_chart(SPEC, prices[prices.index >= "2010-01-01"], data, news_archive(),
+                             line_name="Henry Hub", y_title="$ per MMBtu", hover_price="$%{y:.2f}",
+                             since_label="Since 2010", key="gas_history")
+    except Exception as error:
+        st.error(f"This section hit a problem: {error}")
+    ui.tip("Dots mark days a gas news topic spiked to at least 3× its normal coverage (from 2015). Click one "
+           "to see the biggest stories that day and what gas did next. Gas is far more volatile than oil: a 5% "
+           "day is ordinary, especially in winter.", "How to read this")
 
 with tab_review:
     try:

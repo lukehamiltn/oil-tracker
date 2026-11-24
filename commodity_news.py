@@ -31,6 +31,7 @@ from dataclasses import dataclass, field
 from urllib.parse import quote
 
 import pandas as pd
+import plotly.graph_objects as go
 import streamlit as st
 
 import daily_move as dm
@@ -40,6 +41,7 @@ import markets as mk
 import news
 import news_feeds as nf
 import news_page
+import spike_details
 import ui
 
 
@@ -416,6 +418,54 @@ def like_this_before(spec: Spec, prices: pd.Series, sig: mk.Significance, heads:
 
 
 # Topics ---------------------------------------------------------------------------
+def detail_options(spec: Spec, paths: dict, archive: pd.DataFrame) -> dict:
+    """What spike_details.show needs to explain one of this market's topic
+    spikes (shared by the Topics chart and the price chart on each page)."""
+    return dict(market=spec.key, name=spec.name, paths=paths, labels=spec.labels, colors=spec.colors,
+                queries={k: v["query"] for k, v in spec.topics.items()},
+                keywords={k: v["keywords"] for k, v in spec.topics.items()},
+                archive=pool(spec, archive) if not archive.empty else None, median=spec.typical)
+
+
+@st.fragment
+def price_spike_chart(spec: Spec, prices: pd.Series, data: dict, archive: pd.DataFrame, *, line_name: str,
+                      y_title: str, hover_price: str, since_label: str, key: str) -> None:
+    """The price since `prices` starts, with a dot on every news spike (coloured
+    by topic). Click a dot for that day's stories and what the price did next."""
+    chosen = spike_details.pick(key)
+    fig = go.Figure(go.Scatter(x=prices.index, y=prices.values, mode="lines", name=line_name,
+                               line=dict(color=spec.color, width=1.4), hoverinfo="skip"))
+    spikes = data["spikes"]
+    results, paths = data["spike_react"]
+    if not spikes.empty:
+        spikes = spikes[spikes["date"] >= prices.index[0]]
+        if not results.empty:     # each spike's moves, where already known
+            moves = results[["date", "topic", "day_1_pct", "day_5_pct", "day_20_pct"]]
+            spikes = spikes.merge(moves, on=["date", "topic"], how="left")
+        spikes = spikes.assign(y=prices.reindex(spikes["date"], method="nearest").values,
+                               name=spike_details.ids(spikes))
+        for topic, group in spikes.groupby("topic", sort=False):
+            info = news.topic_info(topic)
+            week = ["" if pd.isna(v) else f"<br>{spec.name} a week later: <b>{v:+.1f}%</b>"
+                    for v in group.get("day_5_pct", pd.Series(float("nan"), index=group.index))]
+            fig.add_trace(go.Scatter(
+                x=group["date"], y=group["y"], mode="markers", name=info["label"],
+                marker=dict(color=info["color"], size=9, line=dict(color="white", width=1)),
+                customdata=[[w, n] for w, n in zip(week, group["name"])],
+                hovertemplate=f"<b>{info['label']}</b><br>%{{x|%b %-d, %Y}}: {hover_price}%{{customdata[0]}}"
+                              "<br><i>Click for that day's stories</i><extra></extra>",
+                unselected=dict(marker=dict(opacity=1))))
+        hit = spikes[spikes["name"] == chosen]
+        if len(hit):
+            spike_details.ring(fig, hit["date"].iloc[0], hit["y"].iloc[0])
+    ui.base_layout(fig, 480, hovermode="closest", yaxis_tickprefix="$", yaxis_title=y_title,
+                   legend=dict(orientation="h", yanchor="top", y=-0.12, x=0, font=dict(size=12)))
+    fig.update_xaxes(range=[prices.index[-1] - pd.DateOffset(years=5), prices.index[-1] + pd.Timedelta(days=20)],
+                     rangeselector=ui.range_buttons([1, 5], since_label, y=1.0))
+    st.plotly_chart(fig, width="stretch", config=ui.CHART_CONFIG, key=key, **spike_details.CLICKABLE)
+    spike_details.show(spikes, chosen, **detail_options(spec, paths, archive), key=key)
+
+
 @st.cache_data(ttl=6 * 60 * 60, show_spinner=False)
 def spikes_with_headlines(_spikes: pd.DataFrame, _archive: pd.DataFrame, version: str, key: str) -> pd.DataFrame:
     """The news spikes, each with a headline from around that day."""
@@ -446,7 +496,8 @@ def topics_view(spec: Spec, prices: pd.Series, data: dict, archive: pd.DataFrame
     t = timelines[timelines["topic"] == topic]
     spikes = results[results["topic"] == topic] if not results.empty else results
     ui.tip(f"`{spec.topics[topic]['query']}`", "Search used for worldwide news")
-    news_page.coverage_chart(t, spikes, spec.colors[topic], key=f"{spec.key}_news_cov", source="world")
+    chosen = news_page.coverage_chart(t, spikes, spec.colors[topic], key=f"{spec.key}_news_cov", source="world")
+    spike_details.show(spikes, chosen, **detail_options(spec, paths, archive), key=f"{spec.key}_news_cov")
     st.markdown(f"**{spec.name} after each of the {len(spikes)} news spikes**")
     ui.event_paths(spikes, paths, spec.colors[topic], news_page.SPIKE_TABLE, key=f"{spec.key}_topic_paths",
                    market=spec.name, center=spec.center)
@@ -518,7 +569,12 @@ def search_view(spec: Spec, prices: pd.Series, sig: mk.Significance, archive: pd
     results, paths = es.compute_results(prices, spikes) if not spikes.empty else (pd.DataFrame(), {})
     st.markdown(f"**{total:,} stories mention {html.escape(query)}**")
     shown = results if not results.empty else pd.DataFrame(columns=["spike_day", "description"])
-    news_page.coverage_chart(t, shown, spec.color, key=f"{spec.key}_search_cov", source=source)
+    chosen = news_page.coverage_chart(t, shown, spec.color, key=f"{spec.key}_search_cov", source=source)
+    if not results.empty:
+        spike_details.show(results, chosen, market=spec.key, name=spec.name, paths=paths,
+                           labels={"search": query}, colors={"search": spec.color}, queries={"search": query},
+                           archive=pool(spec, archive) if not archive.empty else None, median=spec.typical,
+                           key=f"{spec.key}_search_cov")
     if results.empty:
         st.info("This theme never spiked sharply enough to count as a news event "
                 f"(needs {news.SPIKE_RATIO:.0f}× its normal coverage on a busy day).")
