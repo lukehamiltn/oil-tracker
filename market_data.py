@@ -20,6 +20,7 @@ from event_study import DB_PATH
 
 COT_URL = "https://publicreporting.cftc.gov/resource/72hh-3qpy.json"
 WTI_CODE = "067651"  # CFTC's code for NYMEX WTI crude oil futures
+GOLD_CODE = "088691"  # ... and for COMEX gold futures
 DOLLAR_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DTWEXBGS"
 
 
@@ -29,12 +30,14 @@ def _save(table: pd.DataFrame, name: str) -> None:
         table.to_sql(name, db, if_exists="replace", index=False)
 
 
-def download_cot() -> None:
-    print("Downloading CFTC positioning (Commitments of Traders)...")
+def download_cot(code: str = WTI_CODE, name: str = "cot") -> None:
+    """Managed-money positioning in one futures market, saved as table `name`
+    ("cot" = WTI crude, "cot_gold" = gold)."""
+    print(f"Downloading CFTC positioning (Commitments of Traders) into {name}...")
     params = {
         "$select": "report_date_as_yyyy_mm_dd, m_money_positions_long_all, "
                    "m_money_positions_short_all, open_interest_all",
-        "$where": f"cftc_contract_market_code='{WTI_CODE}'",
+        "$where": f"cftc_contract_market_code='{code}'",
         "$order": "report_date_as_yyyy_mm_dd",
         "$limit": 50000,
     }
@@ -45,7 +48,7 @@ def download_cot() -> None:
     table["report_date"] = table["report_date"].str[:10]
     for col in ["mm_long", "mm_short", "open_interest"]:
         table[col] = pd.to_numeric(table[col])
-    _save(table, "cot")
+    _save(table, name)
     print(f"  {len(table):,} weekly reports ({table['report_date'].iloc[0]} "
           f"to {table['report_date'].iloc[-1]})")
 
@@ -62,9 +65,9 @@ def download_dollar() -> None:
     print(f"  {len(table):,} days ({table['date'].iloc[0]} to {table['date'].iloc[-1]})")
 
 
-def load_cot() -> pd.DataFrame:
+def load_cot(name: str = "cot") -> pd.DataFrame:
     with sqlite3.connect(DB_PATH) as db:
-        return pd.read_sql("SELECT * FROM cot", db, parse_dates=["report_date"])
+        return pd.read_sql(f"SELECT * FROM {name}", db, parse_dates=["report_date"])
 
 
 def load_dollar() -> pd.Series:

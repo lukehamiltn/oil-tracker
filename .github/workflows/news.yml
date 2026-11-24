@@ -78,6 +78,12 @@ jobs:
         env:
           MEDIACLOUD_API_KEY: ${{ secrets.MEDIACLOUD_API_KEY }}
         run: python -u storylines.py update-gas
+      - name: Update gold storyline coverage (Media Cloud)
+        continue-on-error: true
+        timeout-minutes: 8
+        env:
+          MEDIACLOUD_API_KEY: ${{ secrets.MEDIACLOUD_API_KEY }}
+        run: python -u storylines.py update-gold
       - name: Save futures closes (backup for live prices)
         continue-on-error: true
         timeout-minutes: 3

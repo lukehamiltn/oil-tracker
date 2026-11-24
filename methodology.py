@@ -193,3 +193,165 @@ def show() -> None:
                                        is_it_real, limits, sources]):
         with tab:
             section()
+
+
+# ---------------------------------------------------------------------------
+# The natural gas and gold sites. Their news tools and statistics work like the
+# oil site's; these sections say where they differ.
+# ---------------------------------------------------------------------------
+def _shared_news(word: str, archive: str) -> str:
+    return f"""
+**Topics** are fixed searches of worldwide news (Media Cloud, about 1,600 English-language
+sites, since 2015). For each day we measure the topic's share of *all* news, so growth in
+overall coverage doesn't distort the comparison.
+
+**A news spike** is a day when a topic got at least {news.SPIKE_RATIO:.0f}× its normal share
+of coverage (normal = the median of the previous {news.BASELINE_DAYS} days), with enough
+articles, and among that topic's busiest 10% of days over the previous year. Spikes have
+to be {news.COOLDOWN_DAYS} or more days apart. Click any spike's dot on a chart to see the
+biggest stories that day (one copy of each, ranked by how many sites ran it) and what
+{word} did next.
+
+**"Spiking" on today's topic cards** means the last 3 days averaged at least
+{news.SPIKE_RATIO:.0f}× normal coverage on enough articles; a high ratio on few articles
+shows as "Elevated".
+
+**Timing.** Reactions are measured from the close one business day *before* the spike, so a
+story that broke the evening before isn't missed.
+
+**Headlines** come from about 30 publishers' public news feeds plus the market newswire
+(Benzinga, via Alpaca), keeping stories that mention {word}. {archive}
+
+**Storylines** are big stories that come back in waves. A wave is a stretch of at least 5
+days when the storyline's coverage ran at 2.5× its normal level for the past year.
+"""
+
+
+def gas_overview() -> None:
+    st.markdown("""
+The Natural Gas Tracker takes what's in the gas news today, finds the moments in the past
+that looked most like it, and shows what U.S. natural gas prices did next.
+
+Everything is measured the same way: **start from the closing price on the last trading
+day before an event, then look at the move one day, one week (5 trading days) and one
+month (20 trading days) later.**
+
+**Typical, not average.** The daily Henry Hub spot price has rare, enormous spikes on very
+cold days (it rose 380% in a week in January 2024). One of those would swamp an average of
+ten events, so the gas site shows the **typical (median) move**: half the events were
+followed by more, half by less.
+
+The price at the top of the page is front-month NYMEX futures, about 10 minutes delayed.
+Charts use the official daily spot price, which is published about a week late.
+""")
+
+
+def gas_news() -> None:
+    st.markdown(_shared_news("Henry Hub", "**Like this before** compares a headline's wording "
+                             "(rare words such as places and company names count most) with every "
+                             "past gas story in our archive since 2015."))
+
+
+def gas_reactions() -> None:
+    st.markdown("""
+**Storage reports.** Every Thursday (later in holiday weeks) the U.S. EIA reports how much gas
+is stored in the Lower 48 states. A report's **surprise** is that week's change minus the
+average change for the same week over the previous five years (analyst forecasts would be
+better, but they aren't freely available). Surprises are sorted into five groups of about a
+fifth of reports each: within 7 Bcf of normal is "about normal", more than 27 Bcf is "much
+tighter" or "much looser". Reports since 2015 are analysed.
+
+**Weather.** Heating and cooling degree days for 14 big U.S. cities, weighted by population,
+from the Open-Meteo forecast, compared with each date's 2015–2024 average.
+
+**Market conditions** compares today's readings (trend, momentum, volatility, storage against
+the 5-year average, and the price against a year ago) with every past day, and finds the
+days most like today.
+
+**Strategy lab and forecast model:** not offered for gas. Back-tested trades would have to
+buy and sell at the daily spot price, which nobody can actually trade, and its cold-day
+spikes would make any rule look far better or worse than it could really have done.
+""")
+
+
+def gas_sources() -> None:
+    st.markdown("""
+| Data | Source | Since |
+|---|---|---|
+| Henry Hub (daily spot) | U.S. EIA via FRED | 1997 |
+| Live Henry Hub futures and futures curve | Yahoo Finance (about 10 min delayed) | today |
+| Weekly gas storage (Lower 48) | U.S. EIA | 2010 |
+| Weather forecast and normals | Open-Meteo (CC BY 4.0) | 2015 |
+| Worldwide news coverage | Media Cloud | 2015 |
+| Market news headlines | Benzinga via Alpaca, and publishers' news feeds | 2015 |
+""")
+
+
+@st.dialog("Methodology", width="large")
+def show_gas() -> None:
+    sections = st.tabs(["Overview", "News", "Measuring reactions", "Is it real?", "Limits", "Data sources"])
+    for tab, section in zip(sections, [gas_overview, gas_news, gas_reactions, is_it_real, limits, gas_sources]):
+        with tab:
+            section()
+
+
+def gold_overview() -> None:
+    st.markdown("""
+The Gold Tracker takes what's in the gold news today, finds the moments in the past that
+looked most like it, and shows what gold did next.
+
+Everything is measured the same way: **start from the closing price on the last trading day
+before an event, then look at the move one day, one week (5 trading days) and one month (20
+trading days) later.** Averages are then checked against luck (see *Is it real?*).
+
+**Gold's price history** is worked out from the daily closes of GLD, the biggest gold fund
+(it holds gold bars in a vault): each share holds about a tenth of an ounce, a little less
+every year as the fund takes its 0.40% fee, so its price is divided by the gold behind each
+share. This gives a daily gold price back to late 2004. The price at the top of the page is
+COMEX gold futures, about 10 minutes delayed.
+""")
+
+
+def gold_news() -> None:
+    st.markdown(_shared_news("gold", "Our saved gold story archive only starts in mid-2026, so the "
+                             "gold site has no *Like this before* yet: it needs about a year of "
+                             "stories to compare with."))
+
+
+def gold_reactions() -> None:
+    st.markdown(f"""
+**Fed decisions** are every change in the Fed's target rate since late 2004, measured from two
+business days before the change took effect. The first move of a new cycle (a turn in policy)
+is kept apart from moves that continue a cycle.
+
+**The real interest rate** is the 10-year yield on inflation-protected Treasuries (TIPS), from
+the Federal Reserve: what a safe bond pays after inflation.
+
+**Market conditions** compares today's readings (trend, momentum, volatility, the real rate and
+its 3-month change, and the dollar) with every past day, and finds the days most like today.
+
+**Spike alerts** check each gold topic every 3 hours and send a push notification (through
+the free ntfy app) when one starts spiking, plus a Saturday week in review.
+""")
+
+
+def gold_sources() -> None:
+    st.markdown("""
+| Data | Source | Since |
+|---|---|---|
+| Gold (from GLD fund closes) | Yahoo Finance; Alpaca as a backup | 2004 |
+| Live gold futures | Yahoo Finance (about 10 min delayed) | today |
+| 10-year real interest rate (TIPS) | Federal Reserve via FRED | 2003 |
+| U.S. dollar (broad index) | Federal Reserve via FRED | 2006 |
+| Fed target rate | Federal Reserve via FRED | 2004 |
+| Worldwide news coverage | Media Cloud | 2015 |
+| Gold market news | Benzinga via Alpaca, and publishers' news feeds | mid-2026 |
+""")
+
+
+@st.dialog("Methodology", width="large")
+def show_gold() -> None:
+    sections = st.tabs(["Overview", "News", "Measuring reactions", "Is it real?", "Limits", "Data sources"])
+    for tab, section in zip(sections, [gold_overview, gold_news, gold_reactions, is_it_real, limits, gold_sources]):
+        with tab:
+            section()

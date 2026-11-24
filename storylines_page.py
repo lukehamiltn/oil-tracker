@@ -12,17 +12,22 @@ from plotly.subplots import make_subplots
 import streamlit as st
 
 import live_prices
+import spike_details
 import storylines as sl
 import ui
 
 # Each market's storylines, saved coverage, and how its price is named
 MARKETS = {
     "oil": {"stories": sl.STORYLINES, "path": sl.PATH, "name": "Brent", "live": "BRENT", "unit": "$",
-            "state": "storyline",
+            "state": "storyline", "prefer": sl.OIL_WORDS,
             "overlap_example": " (the 2025–26 Venezuela wave overlaps the Iran war, for example)"},
     "gas": {"stories": sl.GAS_STORYLINES, "path": sl.GAS_PATH, "name": "Gas", "live": "NATGAS", "unit": "$",
-            "state": "gas_storyline",
+            "state": "gas_storyline", "prefer": r"\b(?:natural gas|lng|henry hub|gas prices?)\b",
             "overlap_example": " (the 2022 Europe crisis and the Russian pipeline cuts ran together, for example)"},
+    "gold": {"stories": sl.GOLD_STORYLINES, "path": sl.GOLD_PATH, "name": "Gold", "live": "GOLD", "unit": "$",
+             "state": "gold_storyline", "prefer": r"\b(?:gold|bullion|precious metals?)\b",
+             "overlap_example": " (in 2022 the Ukraine war and the Fed's fastest rate rises in decades pulled "
+                                "gold in opposite directions, for example)"},
 }
 
 
@@ -101,7 +106,7 @@ def render_for(kind: str, official: pd.Series, archive: pd.DataFrame) -> None:
 
     st.subheader("Storylines", anchor=False)
     st.caption(f"Big stories that run for months and come back in waves. For each one: how much worldwide "
-               f"news it gets, when its waves came, and what {name.lower() if kind == 'gas' else name} prices did "
+               f"news it gets, when its waves came, and what {name.lower() if kind in ('gas', 'gold') else name} prices did "
                "during them.")
     state = m["state"]
     if st.session_state.get(state) not in keys:
@@ -142,7 +147,7 @@ def render_for(kind: str, official: pd.Series, archive: pd.DataFrame) -> None:
     ])
 
     timeline(kind, key, story, cov, s["waves"], latest, prices, name)
-    turning_points(key, cov, latest, prices, archive, stories, name)
+    turning_points(key, cov, latest, prices, archive, stories, name, m["prefer"])
     compare_waves(kind, story, s["major"], latest, prices, name)
     ui.tip("Coverage is the storyline's share of all stories in about 1,600 English-language news sites "
            "(Media Cloud), averaged over 7 days and compared with its median since 2015. A wave is a stretch "
@@ -180,11 +185,11 @@ def timeline(kind, key, story, cov, waves, latest, prices, name) -> None:
            "(1× = a typical day since 2015).", "How to read this")
 
 
-def turning_points(key, cov, wave, prices, archive, stories, name) -> None:
+def turning_points(key, cov, wave, prices, archive, stories, name, prefer=sl.OIL_WORDS) -> None:
     st.markdown(f"**Turning points in the {sl.wave_name(wave)}**")
     rows = []
     for day in sl.turning_points(cov, wave):
-        h = sl.top_headline(archive, key, day, stories)
+        h = sl.top_headline(archive, key, day, stories, prefer)
         x = cov.loc[day, "share"] / cov["long_run"].iloc[0]
         before = prices[prices.index < day]
         after = prices[prices.index >= day]
@@ -195,8 +200,9 @@ def turning_points(key, cov, wave, prices, archive, stories, name) -> None:
             title = html.escape(ui.headline_case(str(h["headline"])))
             link = (f'<a href="{html.escape(str(h["url"]))}" target="_blank" rel="noopener">{title}</a>'
                     if isinstance(h["url"], str) and h["url"] else f'<span class="flash-title">{title}</span>')
-        else:
-            link = "<span class='flash-title'>Peak news day (no saved headline)</span>"
+        else:      # (no saved story that day: offer a news search for it instead)
+            link = ("<span class='flash-title'>Peak news day</span> · "
+                    + spike_details.news_link(stories[key]["query"], day, "Find that day's stories"))
         rows.append(f'<div class="headline">{link}<div class="meta"><span class="publisher">{ui.day(day)}</span>'
                     f' · coverage {x:.0f}× normal{move}</div></div>')
     st.markdown("".join(rows), unsafe_allow_html=True)

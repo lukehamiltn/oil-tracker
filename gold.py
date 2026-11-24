@@ -39,7 +39,9 @@ import gold_review
 import live_prices
 import market_news as mn
 import mediacloud_news
+import methodology
 import news
+import storylines_page
 import ui
 
 ui.apply_styles()
@@ -128,7 +130,9 @@ left.markdown(
     '<div class="dek">The news that moves gold, set against similar moments in the past '
     'and what the price did next.</div></div></div>', unsafe_allow_html=True)
 actions = right.container(key="top_actions")
-if actions.button("Terminology", key="gold_glossary", help="The words the gold market uses, in plain English."):
+if actions.button("Methodology", width="stretch", key="gold_method"):
+    methodology.show_gold()
+if actions.button("Terminology", width="stretch", key="gold_glossary", help="The words the gold market uses, in plain English."):
     glossary.show_gold()
 actions.link_button("Spike alerts", alerts.GOLD_SUBSCRIBE_URL, width="stretch",
                     help="Free push notifications (ntfy app or browser) when a gold news topic starts "
@@ -164,8 +168,8 @@ st.caption(f"Live price: COMEX gold futures, about 10 minutes delayed. Charts us
            f"(latest {ui.day(prices.index[-1], year=False)}), worked out from the GLD gold fund.")
 st.write("")
 
-tab_news, tab_review, tab_fed, tab_history, tab_cond = st.tabs(
-    ["News", "Week in review", "Fed & interest rates", "Prices & history", "Market conditions"])
+tab_news, tab_review, tab_fed, tab_history, tab_cond, tab_stories = st.tabs(
+    ["News", "Week in review", "Fed & interest rates", "Prices & history", "Market conditions", "Storylines"])
 
 
 # News ---------------------------------------------------------------------------------
@@ -299,12 +303,21 @@ with tab_fed:
 
 # Prices & history ---------------------------------------------------------------------
 def history_section() -> None:
-    st.subheader("Gold prices and gold news spikes", anchor=False)
+    st.subheader("Gold prices and past events", anchor=False)
+    fed_results, fed_paths = data["fed_react"]
+    fed_kind = dict(key="fed", name="Fed rate changes", title="Fed rate change", noun="rate change",
+                    symbol="square", mark="■", default=True, results=fed_results, paths=fed_paths,
+                    cat_col="decision", categories=fed.CATEGORIES,
+                    labels={k: f"Fed: {v}" for k, v in fed.LABELS.items()}, colors=fed.COLORS,
+                    query='("Federal Reserve" OR "the Fed") AND (rate OR rates) AND (gold OR bullion)',
+                    keywords=r"\bfed\b|federal reserve|powell|rate cut|rate hike|interest rate")
     cn.price_spike_chart(SPEC, prices, data, gold_archive(), line_name="Gold", y_title="$ per ounce",
-                         hover_price="$%{y:,.0f}", since_label="Since 2005", key="gold_history")
-    ui.tip("Dots mark days a gold news topic spiked to at least 3× its normal coverage (from 2015). Click one "
-           "to see the biggest stories that day and what gold did next. Prices are daily closes worked out "
-           "from the GLD gold fund (it holds gold bars), in $ per ounce.", "How to read this")
+                         hover_price="$%{y:,.0f}", since_label="Since 2005", key="gold_history",
+                         extras=[fed_kind])
+    ui.tip("Dots mark days a gold news topic spiked to at least 3× its normal coverage (from 2015); squares mark "
+           "changes in the Fed's interest rate (from 2004). Click one to see the stories that day and what gold "
+           "did next. Prices are daily closes worked out from the GLD gold fund (it holds gold bars), in $ per "
+           "ounce.", "How to read this")
 
     st.write("")
     st.markdown("**How gold usually moves in each month**")
@@ -341,6 +354,12 @@ with tab_cond:
     try:
         table, extended, added = gold_conditions(f"{prices.index[-1]}-{len(prices)}-{real.index[-1]}")
         conditions.show(table, extended, added, conditions.GOLD)
+    except Exception as error:
+        st.error(f"This section hit a problem: {error}")
+
+with tab_stories:
+    try:
+        storylines_page.render_for("gold", prices, gold_archive())
     except Exception as error:
         st.error(f"This section hit a problem: {error}")
 

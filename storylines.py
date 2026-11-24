@@ -103,7 +103,54 @@ GAS_STORYLINES = {
     },
 }
 
-WAVE_RATIO = 2.5     # a wave: 7-day coverage at least 2.5x its normal (past year's median)...
+# The gold page's storylines: the crises and fights that send people to gold
+GOLD_PATH = Path(__file__).parent / "news_data" / "mc_gold_storylines.csv"
+GOLD_STORYLINES = {
+    "trade_war": {
+        "label": "Tariffs and trade wars",
+        "summary": "Trade fights, above all between the U.S. and China, which unsettle markets and the "
+                   "dollar and send buyers to gold.",
+        "query": '(tariff OR tariffs OR "trade war") AND (gold OR bullion)',
+        "keywords": r"tariff|trade war|trade deal|trade talks",
+        "color": "#2a78d6",
+    },
+    "ukraine": {
+        "label": "Russia's war in Ukraine",
+        "summary": "The invasion of Ukraine and the sanctions that followed, including the freezing of "
+                   "Russia's dollar reserves, a reason central banks give for buying gold.",
+        "query": '(Russia OR Ukraine) AND (war OR invasion OR sanctions) AND (gold OR bullion)',
+        "keywords": r"russia|ukrain|kremlin|putin|kyiv",
+        "color": "#6250d6",
+    },
+    "middle_east": {
+        "label": "War in the Middle East",
+        "summary": "Wars involving Israel, Iran and their neighbours: classic safe-haven moments for gold.",
+        "query": '(Israel OR Iran OR Gaza OR Hezbollah OR Houthi) AND (war OR strike OR strikes OR attack '
+                 'OR attacks OR missile) AND (gold OR bullion)',
+        "keywords": r"israel|\biran|gaza|hezbollah|houthi|middle east",
+        "color": "#e87ba4",
+    },
+    "us_debt": {
+        "label": "U.S. debt fights and shutdowns",
+        "summary": "Debt-ceiling standoffs, government shutdowns and credit downgrades, which raise doubts "
+                   "about the dollar and Treasury bonds.",
+        "query": '("debt ceiling" OR "debt limit" OR "government shutdown" OR "credit rating downgrade" OR '
+                 '"U.S. debt") AND (gold OR bullion)',
+        "keywords": r"debt ceiling|debt limit|shutdown|downgrade|u\.?s\.? debt|deficit",
+        "color": "#eda100",
+    },
+    "banking": {
+        "label": "Bank scares",
+        "summary": "Bank failures and fears for the banking system, like Silicon Valley Bank and Credit "
+                   "Suisse in March 2023.",
+        "query": '("bank failure" OR "bank failures" OR "bank collapse" OR "banking crisis" OR "bank run" OR '
+                 '"Silicon Valley Bank" OR "Credit Suisse") AND (gold OR bullion)',
+        "keywords": r"\bbank|svb|credit suisse|lender",
+        "color": "#1baf7a",
+    },
+}
+
+WAVE_RATIO = 2.5    # a wave: 7-day coverage at least 2.5x its normal (past year's median)...
 WAVE_MIN_DAYS = 5    # ...for at least 5 days,
 WAVE_GAP = 21        # with quieter spells shorter than 3 weeks counted as the same wave
 PATH_DAYS = 120      # Brent is followed for about 6 months (trading days) from a wave's start
@@ -231,8 +278,11 @@ def turning_points(cov: pd.DataFrame, wave, n: int = 5, apart: int = 10) -> list
     return sorted(picked)
 
 
+OIL_WORDS = r"\b(?:oil|crude|brent|wti|barrel)"
+
+
 def top_headline(archive: pd.DataFrame, key: str, day: pd.Timestamp,
-                 stories: dict | None = None) -> pd.Series | None:
+                 stories: dict | None = None, prefer: str = OIL_WORDS) -> pd.Series | None:
     """The saved headline that best stands for a storyline on a day (that
     day or the next, since a story often breaks late)."""
     if archive.empty:
@@ -242,8 +292,8 @@ def top_headline(archive: pd.DataFrame, key: str, day: pd.Timestamp,
                                                   regex=True)]
     if hits.empty:
         return None
-    # prefer headlines that also mention oil, then real articles over flashes
-    oil = hits["headline"].str.contains(r"\b(?:oil|crude|brent|wti|barrel)", case=False, regex=True)
+    # prefer headlines that also mention the market (oil, gas, gold), then real articles over flashes
+    oil = hits["headline"].str.contains(prefer, case=False, regex=True)
     has_summary = hits["summary"].fillna("").str.len() > 0
     ranked = hits.assign(_oil=oil, _art=has_summary).sort_values(["_oil", "_art", "time"],
                                                                  ascending=[False, False, True])
@@ -283,3 +333,5 @@ if __name__ == "__main__":
         sys.exit(0 if update() else 1)
     if command == "update-gas":
         sys.exit(0 if update(GAS_PATH, GAS_STORYLINES) else 1)
+    if command == "update-gold":
+        sys.exit(0 if update(GOLD_PATH, GOLD_STORYLINES) else 1)

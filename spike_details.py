@@ -151,14 +151,14 @@ def _story_rows(stories: pd.DataFrame, day: pd.Timestamp) -> pd.DataFrame:
         "kind": "article", "topics": [[] for _ in range(len(stories))]})
 
 
-def _google_link(query: str, day: pd.Timestamp) -> str:
-    """A Google News search for the theme, limited to the days around the spike."""
+def news_link(query: str, day: pd.Timestamp, label: str = "Search Google News for those days") -> str:
+    """A Google News search for the theme, limited to the days around `day`."""
     words = re.sub(r"\s+", " ", query.replace("(", " ").replace(")", " ")).strip()
     start, end = day - pd.Timedelta(days=1), day + pd.Timedelta(days=1)
     url = (f"https://www.google.com/search?tbm=nws&q={quote(words)}"
            f"&tbs=cdr:1,cd_min:{start:%m/%d/%Y},cd_max:{end:%m/%d/%Y}")
     return (f'<a class="more" href="{html.escape(url)}" target="_blank" rel="noopener">'
-            f'Search Google News for those days ↗</a>')
+            f'{html.escape(label)} ↗</a>')
 
 
 def stories_section(market: str, topic: str, day: pd.Timestamp, query: str | None,
@@ -194,7 +194,7 @@ def stories_section(market: str, topic: str, day: pd.Timestamp, query: str | Non
                 st.session_state[live_key] = True
                 st.rerun(scope="fragment") if _in_fragment() else st.rerun()
     if query:
-        st.markdown(_google_link(query, day), unsafe_allow_html=True)
+        st.markdown(news_link(query, day), unsafe_allow_html=True)
 
 
 def _in_fragment() -> bool:
@@ -225,7 +225,8 @@ def _moves_line(row, name: str) -> str:
     return f"{name}: " + " · ".join(parts) if parts else ""
 
 
-def _others_line(spikes: pd.DataFrame, row, category: str, label: str, name: str, median: bool) -> str:
+def _others_line(spikes: pd.DataFrame, row, category: str, label: str, name: str, median: bool,
+                 noun: str = "spike") -> str:
     if "day_5_pct" not in spikes:
         return ""
     others = spikes[(spikes[category] == row[category]) & (spikes["spike_day"] != row["spike_day"])]
@@ -233,7 +234,7 @@ def _others_line(spikes: pd.DataFrame, row, category: str, label: str, name: str
     if len(week) < 3:
         return ""
     middle, word = (week.median(), "typically moved") if median else (week.mean(), "averaged")
-    return (f"<div class='eyebrow' style='margin-top:0.8rem'>Every other “{html.escape(label)}” spike</div>"
+    return (f"<div class='eyebrow' style='margin-top:0.8rem'>Every other “{html.escape(label)}” {noun}</div>"
             f"<div class='past'>{len(week)} other times: {name} {word} <b>{middle:+.1f}%</b> a week "
             f"later and rose {(week > 0).mean():.0%} of the time.</div>")
 
@@ -242,29 +243,38 @@ def _others_line(spikes: pd.DataFrame, row, category: str, label: str, name: str
 def show(spikes: pd.DataFrame, chosen: str | None, *, market: str, name: str, paths: dict,
          labels: dict, colors: dict, queries: dict, keywords: dict | None = None,
          archive: pd.DataFrame | None = None, median: bool = False, category: str = "topic",
-         key: str) -> None:
+         kinds: dict | None = None, hint: str = HINT, key: str) -> None:
     """The panel for the clicked spike, or a hint to click one.
       market    "oil" / "gas" / "gold": where the saved stories are filed
       name      the price, as written in a sentence ("Brent", "Gold")
       paths     {event date: % path}, from event_study.compute_results
       labels, colors, queries, keywords   per topic (a search: one entry)
-      archive   our own saved stories (with a "day" column), the fallback"""
+      archive   our own saved stories (with a "day" column), the fallback
+      kinds     other kinds of event on the same chart, whose topics start
+                with "<kind>:" (e.g. "fed:cut_first"): {kind: {"title": "Fed rate
+                change", "noun": "rate change", "paths": {...}}}"""
     row = find(spikes, chosen, category)
     if row is None:
-        st.caption(HINT.format(name=name.lower() if name == "Gold" else name))
+        st.caption(hint.format(name=name.lower() if name == "Gold" else name))
         return
     topic, day = str(row[category]), pd.Timestamp(row["spike_day"]).normalize()
     label, color = labels.get(topic, topic), colors.get(topic, "#2a78d6")
+    kind = (kinds or {}).get(topic.split(":")[0]) if ":" in topic else None
+    title, noun = (kind["title"], kind["noun"]) if kind else ("News spike", "spike")
+    if kind:
+        paths = kind["paths"]
     keywords = keywords or {}
     st.html(ui.CARD_CSS)
     with st.container(border=True):
         top_left, top_right = st.columns([6, 1], vertical_alignment="top")
         with top_left:
-            ui.eyebrow(f"News spike · {ui.day(day, weekday=True)}")
+            ui.eyebrow(f"{title} · {ui.day(day, weekday=True)}")
             coverage = ""
             if pd.notna(row.get("ratio")):
                 articles = f" ({int(row['articles']):,} articles)" if pd.notna(row.get("articles")) else ""
                 coverage = f" · coverage {row['ratio']:.1f}× normal{articles}"
+            elif kind and isinstance(row.get("description"), str):
+                coverage = " · " + html.escape(row["description"])
             st.markdown(ui.chip(html.escape(label), color)
                         + f"<span style='color:{ui.MUTED};font-size:0.9rem'>{coverage}</span>",
                         unsafe_allow_html=True)
@@ -278,10 +288,10 @@ def show(spikes: pd.DataFrame, chosen: str | None, *, market: str, name: str, pa
         with chart:
             path = paths.get(row["date"]) if "date" in row else None
             if path is not None:
-                st.markdown(f"**{name} around this spike**")
+                st.markdown(f"**{name} around this {noun}**")
                 _path_chart(path, color, name, key)
                 st.markdown(_moves_line(row, name), unsafe_allow_html=True)
             else:
                 st.caption(f"Too recent: what {name.lower() if name == 'Gold' else name} did over the "
                            "following month isn't known yet.")
-            st.markdown(_others_line(spikes, row, category, label, name, median), unsafe_allow_html=True)
+            st.markdown(_others_line(spikes, row, category, label, name, median, noun), unsafe_allow_html=True)

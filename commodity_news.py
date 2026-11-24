@@ -254,6 +254,18 @@ def headline_rows(spec: Spec, heads: pd.DataFrame, prices: pd.Series = None, arc
 
 
 # Today ----------------------------------------------------------------------------
+def part_of_storyline(spec: Spec, reasons: pd.DataFrame) -> str | None:
+    """The storyline most of today's explaining headlines belong to (its label), if any."""
+    import storylines as sl
+    stories = {"GAS": sl.GAS_STORYLINES, "GOLD": sl.GOLD_STORYLINES}.get(spec.market, {})
+    if not stories or reasons.empty:
+        return None
+    counts = {k: reasons["headline"].fillna("").str.contains(s["keywords"], case=False, regex=True).sum()
+              for k, s in stories.items()}
+    best = max(counts, key=counts.get)
+    return stories[best]["label"] if counts[best] >= max(2, len(reasons) // 2) else None
+
+
 def why_today(spec: Spec, q: dict | None, prices: pd.Series, heads: pd.DataFrame, heat: pd.DataFrame,
               show_rows) -> None:
     """Today's move, how unusual it is, the headlines most likely behind it,
@@ -296,6 +308,10 @@ def why_today(spec: Spec, q: dict | None, prices: pd.Series, heads: pd.DataFrame
                        if len(heads) else heads)
             if len(reasons):
                 show_rows(reasons)
+                story = part_of_storyline(spec, reasons)
+                if story:
+                    st.markdown(f"<div class='history'>Part of a bigger story: <b>{html.escape(story)}</b> "
+                                "· see the Storylines tab for its past waves</div>", unsafe_allow_html=True)
             else:
                 st.caption(spec.quiet_note)
             ui.tip(f"Headlines from the last two days that report {spec.word} moving the same way as the market "
@@ -427,35 +443,80 @@ def detail_options(spec: Spec, paths: dict, archive: pd.DataFrame) -> dict:
                 archive=pool(spec, archive) if not archive.empty else None, median=spec.typical)
 
 
+MOVES = ["day_1_pct", "day_5_pct", "day_20_pct"]
+NEWS_KIND = {"name": "News spikes", "symbol": "circle", "mark": "●"}
+
+
+def _extra_events(extra: dict, since: pd.Timestamp) -> pd.DataFrame:
+    """Another kind of event (Fed rate changes, storage reports) in the same
+    shape as the news spikes, its categories named "<kind>:<category>"."""
+    results = extra["results"]
+    if results.empty:
+        return pd.DataFrame(columns=["date", "spike_day", "topic", "description", *MOVES])
+    rows = results[results[extra["cat_col"]].isin(extra["categories"]) & (results["date"] >= since)]
+    return pd.DataFrame({"date": rows["date"], "spike_day": rows["date"],
+                         "topic": extra["key"] + ":" + rows[extra["cat_col"]].astype(str),
+                         "description": rows["description"], **{m: rows[m] for m in MOVES}})
+
+
 @st.fragment
 def price_spike_chart(spec: Spec, prices: pd.Series, data: dict, archive: pd.DataFrame, *, line_name: str,
-                      y_title: str, hover_price: str, since_label: str, key: str) -> None:
+                      y_title: str, hover_price: str, since_label: str, key: str,
+                      extras: list[dict] | None = None) -> None:
     """The price since `prices` starts, with a dot on every news spike (coloured
-    by topic). Click a dot for that day's stories and what the price did next."""
+    by topic) and, like the oil site's Event history, other kinds of event in
+    `extras` (each: key, name, symbol, mark, results, paths, cat_col,
+    categories, labels, colors, query, keywords, noun, default). Buttons pick
+    which kinds show. Click a dot for that day's stories and what the price did next."""
+    extras = extras or []
+    kinds = {"news": NEWS_KIND, **{e["key"]: e for e in extras}}
+    if extras:
+        shown = st.pills("Show", list(kinds), selection_mode="multi", key=f"{key}_kinds",
+                         default=["news"] + [e["key"] for e in extras if e.get("default")],
+                         format_func=lambda k: f"{kinds[k]['mark']} {kinds[k]['name']}") or []
+    else:
+        shown = ["news"]
     chosen = spike_details.pick(key)
     fig = go.Figure(go.Scatter(x=prices.index, y=prices.values, mode="lines", name=line_name,
                                line=dict(color=spec.color, width=1.4), hoverinfo="skip"))
     spikes = data["spikes"]
     results, paths = data["spike_react"]
-    if not spikes.empty:
+    options = detail_options(spec, paths, archive)
+    parts = []
+    if "news" in shown and not spikes.empty:
         spikes = spikes[spikes["date"] >= prices.index[0]]
         if not results.empty:     # each spike's moves, where already known
-            moves = results[["date", "topic", "day_1_pct", "day_5_pct", "day_20_pct"]]
-            spikes = spikes.merge(moves, on=["date", "topic"], how="left")
-        spikes = spikes.assign(y=prices.reindex(spikes["date"], method="nearest").values,
-                               name=spike_details.ids(spikes))
-        for topic, group in spikes.groupby("topic", sort=False):
-            info = news.topic_info(topic)
+            spikes = spikes.merge(results[["date", "topic", *MOVES]], on=["date", "topic"], how="left")
+        parts.append(spikes)
+    detail_kinds = {}
+    for extra in extras:
+        detail_kinds[extra["key"]] = {"title": extra["title"], "noun": extra["noun"], "paths": extra["paths"]}
+        for cat in extra["categories"]:      # what the details panel needs for each category
+            name = f"{extra['key']}:{cat}"
+            options["labels"][name] = extra["labels"][cat]
+            options["colors"][name] = extra["colors"][cat]
+            options["queries"][name] = extra["query"]
+            options["keywords"][name] = extra["keywords"]
+        if extra["key"] in shown:
+            parts.append(_extra_events(extra, prices.index[0]))
+    events = pd.concat(parts, ignore_index=True) if parts else pd.DataFrame(columns=["date", "spike_day", "topic"])
+    if not events.empty:
+        events = events.assign(y=prices.reindex(events["date"], method="nearest").values,
+                               name=spike_details.ids(events))
+        for topic, group in events.groupby("topic", sort=False):
+            kind = kinds.get(topic.split(":")[0]) if ":" in topic else NEWS_KIND
+            label, color = options["labels"].get(topic, topic), options["colors"].get(topic, "#898781")
             week = ["" if pd.isna(v) else f"<br>{spec.name} a week later: <b>{v:+.1f}%</b>"
                     for v in group.get("day_5_pct", pd.Series(float("nan"), index=group.index))]
             fig.add_trace(go.Scatter(
-                x=group["date"], y=group["y"], mode="markers", name=info["label"],
-                marker=dict(color=info["color"], size=9, line=dict(color="white", width=1)),
+                x=group["date"], y=group["y"], mode="markers", name=label,
+                marker=dict(color=color, symbol=kind["symbol"], size=9 if kind is NEWS_KIND else 11,
+                            line=dict(color="white", width=1)),
                 customdata=[[w, n] for w, n in zip(week, group["name"])],
-                hovertemplate=f"<b>{info['label']}</b><br>%{{x|%b %-d, %Y}}: {hover_price}%{{customdata[0]}}"
+                hovertemplate=f"<b>{label}</b><br>%{{x|%b %-d, %Y}}: {hover_price}%{{customdata[0]}}"
                               "<br><i>Click for that day's stories</i><extra></extra>",
                 unselected=dict(marker=dict(opacity=1))))
-        hit = spikes[spikes["name"] == chosen]
+        hit = events[events["name"] == chosen]
         if len(hit):
             spike_details.ring(fig, hit["date"].iloc[0], hit["y"].iloc[0])
     ui.base_layout(fig, 480, hovermode="closest", yaxis_tickprefix="$", yaxis_title=y_title,
@@ -463,7 +524,9 @@ def price_spike_chart(spec: Spec, prices: pd.Series, data: dict, archive: pd.Dat
     fig.update_xaxes(range=[prices.index[-1] - pd.DateOffset(years=5), prices.index[-1] + pd.Timedelta(days=20)],
                      rangeselector=ui.range_buttons([1, 5], since_label, y=1.0))
     st.plotly_chart(fig, width="stretch", config=ui.CHART_CONFIG, key=key, **spike_details.CLICKABLE)
-    spike_details.show(spikes, chosen, **detail_options(spec, paths, archive), key=key)
+    hint = ("Click any dot or shape to see the stories that day and what {name} did next." if extras
+            else spike_details.HINT)
+    spike_details.show(events, chosen, **options, kinds=detail_kinds, hint=hint, key=key)
 
 
 @st.cache_data(ttl=6 * 60 * 60, show_spinner=False)

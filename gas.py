@@ -41,6 +41,7 @@ import live_prices
 import market_news as mn
 import markets as mk
 import mediacloud_news
+import methodology
 import news
 import news_feeds as nf
 import news_page
@@ -146,7 +147,9 @@ left.markdown(
     '<div class="dek">The news that moves U.S. natural gas, set against similar moments in the past '
     'and what prices did next.</div></div></div>', unsafe_allow_html=True)
 actions = right.container(key="top_actions")
-if actions.button("Terminology", key="gas_glossary", help="The words the gas market uses, in plain English."):
+if actions.button("Methodology", width="stretch", key="gas_method"):
+    methodology.show_gas()
+if actions.button("Terminology", width="stretch", key="gas_glossary", help="The words the gas market uses, in plain English."):
     glossary.show_gas()
 actions.link_button("Spike alerts", alerts.GAS_SUBSCRIBE_URL, width="stretch",
                     help="Free push notifications (ntfy app or browser) when a natural gas news topic starts "
@@ -446,15 +449,24 @@ with tab_history:
     except Exception as error:
         st.error(f"This section hit a problem: {error}")
     st.write("")
-    st.subheader("Henry Hub prices and gas news spikes", anchor=False)
+    st.subheader("Henry Hub prices and past events", anchor=False)
+    storage_results, storage_paths = data["storage_react"]
+    storage_kind = dict(key="storage", name="Big storage surprises", title="EIA storage report",
+                        noun="storage report", symbol="triangle-up", mark="▲", default=False,
+                        results=storage_results, paths=storage_paths, cat_col="category",
+                        categories=["big_draw", "big_build"],       # only the largest fifth each way
+                        labels={k: f"Storage: {v}" for k, v in gs.LABELS.items()}, colors=gs.COLORS,
+                        query='"natural gas" AND storage AND (EIA OR injection OR withdrawal)',
+                        keywords=r"storage|inventor|injection|withdrawal")
     try:
         cn.price_spike_chart(SPEC, prices[prices.index >= "2010-01-01"], data, news_archive(),
                              line_name="Henry Hub", y_title="$ per MMBtu", hover_price="$%{y:.2f}",
-                             since_label="Since 2010", key="gas_history")
+                             since_label="Since 2010", key="gas_history", extras=[storage_kind])
     except Exception as error:
         st.error(f"This section hit a problem: {error}")
-    ui.tip("Dots mark days a gas news topic spiked to at least 3× its normal coverage (from 2015). Click one "
-           "to see the biggest stories that day and what gas did next. Gas is far more volatile than oil: a 5% "
+    ui.tip("Dots mark days a gas news topic spiked to at least 3× its normal coverage (from 2015); triangles mark "
+           "the weekly EIA storage reports with the biggest surprises (the largest fifth each way, from 2015). "
+           "Click one to see the stories that day and what gas did next. Gas is far more volatile than oil: a 5% "
            "day is ordinary, especially in winter.", "How to read this")
 
 with tab_review:
